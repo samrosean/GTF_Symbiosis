@@ -1724,11 +1724,9 @@ def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceT
     print("Creating Connections:")
     my_network_data = []
     for index, row in exonMatchedGTF.iterrows():
-​
         sizeDF = len(exonMatchedGTF.index)
         numbersInterval = [round(sizeDF/4), round(2*sizeDF/4), round(3*sizeDF/4), sizeDF-1]
         terms = ["25%", "50%", "75%", "100%"]
-​
         for item in exonMatchedGTF.at[index, "Shared_SJ_Transcript"]:
             if item is not None:
                 connection = [item, exonMatchedGTF.at[index, "gene_id"]]
@@ -1737,7 +1735,6 @@ def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceT
         if index in numbersInterval:
             locationIndex = numbersInterval.index(index)
             print(terms[locationIndex], end=" ")
-​
     print("\n")
     g = nx.Graph()
     g.add_edges_from(my_network_data)
