@@ -8,7 +8,7 @@ setuptools.setup(
     version="0.0.1",
     author="Samuel Rosean",
     author_email="samrosean@gmail.com",
-    packages=['primaryfunctions'],
+    packages=['GTF_Symbiosis'],
     description="construction of transcriptome from GTF files, and comparison between GTf files",
     long_description=long_description,
     long_description_content_type="text/markdown",
