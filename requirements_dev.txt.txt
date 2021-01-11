@@ -1,0 +1,15 @@
+pandas
+numpy
+matplotlib.pyplot
+matplotlib_venn
+pywaffle
+prettytable
+math
+matplotlib.gridspec
+copy
+collections
+itertools
+venn
+networkx
+itertools
+upsetplot
