@@ -1788,7 +1788,6 @@ def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceT
             if exonMatchedGTF2.at[index, "end"] + item[1] < exonMatchedGTF2.at[index, "end"]:
                 exonMatchedGTF2.at[index, "end"] = exonMatchedGTF2.at[index, "end"] - item[1]
         exonMatchedGTF2.at[index, "Matched_Transcript"].append(exonMatchedGTF2.at[index, "transcript_id"])
-​
     #Clean Up Columns and column names
     exonMatchedGTF2 = exonMatchedGTF2.reset_index()
     exonMatchedGTF2 = exonMatchedGTF2.drop(columns=['found'])
@@ -1865,7 +1864,6 @@ def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceT
         for item in exonMatchedGTF.at[index, "Located_In"]:
             if item in analyzedLabels:
                 vennDict[item].add(exonMatchedGTF.at[index, "gene_id"])
-​
     while k < len(analyzedLabels):
         vennDict[analyzedLabels[k]].remove("default")
         k = k + 1
