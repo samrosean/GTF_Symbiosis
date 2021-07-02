@@ -1067,7 +1067,7 @@ def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold,
 ##refdistanceThreshold --- threshold you consider acceptable between start and stop sites to be counted as a match for your reference
 
 
-def gftSymbiosis(analyzedGTFs, analyzedGTFLabels, threshold, distanceThreshold, referenceGTF = "", referenceGTFLabel = "", refdistanceThreshold = 0):
+def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, threshold, distanceThreshold, referenceGTF = "", referenceGTFLabel = "", refdistanceThreshold = 0):
     
     #Print Out Basic Data of Both GTFs
     t = PrettyTable(['Name', 'Transcripts', 'Exons', 'Genes']) 
