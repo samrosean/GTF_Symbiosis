@@ -1609,7 +1609,7 @@ def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, threshold, distanceThreshold, 
 ##oneExonSeperate --- a bianry flag that determines whether you want the final analysis seperated by multi-exon and one-exon (default value is False, which corresponds to not splitting the final analysis)
 
     
-def gtfTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceThreshold, gtfReference = "", referenceLabel ="", oneExonSeperate = False, vennReference = True):
+def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceThreshold, gtfReference = "", referenceLabel ="", oneExonSeperate = False, vennReference = True):
     
     print("Combining:")
     
