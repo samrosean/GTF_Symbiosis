@@ -1067,7 +1067,7 @@ def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold,
 ##refdistanceThreshold --- threshold you consider acceptable between start and stop sites to be counted as a match for your reference
 
 
-def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, threshold, distanceThreshold, referenceGTF = "", referenceGTFLabel = "", refdistanceThreshold = 0):
+def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, referenceGTF = "", referenceGTFLabel = "", refdistanceThreshold = 0, threshold = 0, distanceThreshold = 100):
     
     #Print Out Basic Data of Both GTFs
     t = PrettyTable(['Name', 'Transcripts', 'Exons', 'Genes']) 
@@ -1609,7 +1609,7 @@ def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, threshold, distanceThreshold, 
 ##oneExonSeperate --- a bianry flag that determines whether you want the final analysis seperated by multi-exon and one-exon (default value is False, which corresponds to not splitting the final analysis)
 
     
-def gtfTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceThreshold, gtfReference = "", referenceLabel ="", oneExonSeperate = False, vennReference = True):
+def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceLabel ="", oneExonSeperate = False, vennReference = True, exonMatchThreshold = 0, distanceThreshold = 100,):
     
     print("Combining:")
     
