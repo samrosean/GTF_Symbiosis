@@ -1621,7 +1621,7 @@ def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceT
         sizingGTF = analyzedGTFs[i].copy()
         completeSize = completeSize + sizingGTF[sizingGTF["feature"]=="transcript"].shape[0]
         if i < len(analyzedGTFs)-1:
-            print(", ", end='')r
+            print(", ", end='')
         i = i + 1
     print("\n")
     
