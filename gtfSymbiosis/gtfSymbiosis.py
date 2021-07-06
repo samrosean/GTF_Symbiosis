@@ -23,12 +23,12 @@ import os
 
 ##Collapsed Returns (Returns transcripts and genes with a list of exons in those regions)
 
-##Given a GTF Files which contains Transcripts, Genes, Codons, Exons, etc, it finds all exons associated with a transcript 
+##Given a GTF Files which contains Transcripts, Genes, Codons, Exons, etc, it finds all exons associated with a transcript
 ##and adds them into an exon column
 
 ##colFrame --- GTF file dataframe
 
-## The finale result will look like:
+## The final result will look like:
     
     ## feature   :   exons
     ##transcript :  [[124,456], [546, 789]]
