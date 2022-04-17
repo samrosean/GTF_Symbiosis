@@ -1,26 +1,3 @@
-from gtfparse import read_gtf
-import pandas as pd
-import numpy as np
-import ensembl_rest
-import matplotlib.pyplot as plt
-from matplotlib_venn import venn2
-from pywaffle import Waffle 
-from prettytable import PrettyTable
-import math
-from matplotlib.gridspec import GridSpec
-from copy import deepcopy
-from collections import OrderedDict
-from BCBio import GFF
-from Bio import SeqIO
-from itertools import combinations
-from venn import venn
-import networkx as nx
-import itertools
-from venn import pseudovenn
-from upsetplot import from_contents
-from upsetplot import plot
-import os
-
 ##Collapsed Returns (Returns transcripts and genes with a list of exons in those regions)
 
 ##Given a GTF Files which contains Transcripts, Genes, Codons, Exons, etc, it finds all exons associated with a transcript
