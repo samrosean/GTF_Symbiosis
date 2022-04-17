@@ -1,4 +1,4 @@
-import pandas as pd
+import pandas
 import statistics
 import numpy as np
 import ensembl_rest
@@ -138,7 +138,7 @@ def reformatExons(startFrame):
     
     ##Reformat For Exporting: For most of the operations and analysis of gtfTranscriptome the assembled transcriptome stores exons as a column value for each transcript. The complete dataframe returned by gtfTranscriptome is also done in this format, however gtfs are not conventionally viewed or stored in this way. reformatExons creates the exon rows a gtf traditionally has by creating a new row for each exon stored for every transcript.
     
-    endFrame = pd.DataFrame()
+    endFrame = pandas.DataFrame()
     
      ###Create an array of each GTFs chromosones
     chromosones1 = startFrame.seqname.unique().tolist()
@@ -167,7 +167,7 @@ def reformatExons(startFrame):
     
     for item in chromosones2:
         
-        chromeFrame = pd.DataFrame()
+        chromeFrame = pandas.DataFrame()
         runFrame = startFrame[startFrame["seqname"] == item]
         runFrame = runFrame.reset_index()
         runFrame = runFrame.drop(columns=['index'])
@@ -180,29 +180,29 @@ def reformatExons(startFrame):
         for index, row in runFrame.iterrows():
             
             row1 = runFrame.iloc[index]
-            rowFrame = pd.DataFrame(row1)
+            rowFrame = pandas.DataFrame(row1)
             rowFrame = rowFrame.T
             
             rowFrame = rowFrame.reset_index()
             rowFrame = rowFrame.drop(columns=['index'])
         
-            tempFrame = pd.DataFrame()
+            tempFrame = pandas.DataFrame()
             k=1
             if rowFrame.at[0,"strand"] == "+":
                 for itemExon in rowFrame.at[0,"Exons"]:
-                    newRow = pd.DataFrame([[rowFrame.at[0,"seqname"],rowFrame.at[0,"source"],"exon", itemExon[0], itemExon[1], rowFrame.at[0,"score"], rowFrame.at[0,"strand"], rowFrame.at[0,"frame"], rowFrame.at[0,"gene_id"], rowFrame.at[0,"transcript_id"] , k]], columns=['seqname','source','feature', 'start', 'end', 'score', 'strand', 'frame', 'gene_id', 'transcript_id', 'exon_id'])
-                    tempFrame = pd.concat([tempFrame, newRow])
+                    newRow = pandas.DataFrame([[rowFrame.at[0,"seqname"],rowFrame.at[0,"source"],"exon", itemExon[0], itemExon[1], rowFrame.at[0,"score"], rowFrame.at[0,"strand"], rowFrame.at[0,"frame"], rowFrame.at[0,"gene_id"], rowFrame.at[0,"transcript_id"] , k]], columns=['seqname','source','feature', 'start', 'end', 'score', 'strand', 'frame', 'gene_id', 'transcript_id', 'exon_id'])
+                    tempFrame = pandas.concat([tempFrame, newRow])
                     k = k + 1
             elif rowFrame.at[0,"strand"] == "-":
                 for itemExon in reversed(rowFrame.at[0,"Exons"]):
-                    newRow = pd.DataFrame([[rowFrame.at[0,"seqname"],rowFrame.at[0,"source"],"exon", itemExon[0], itemExon[1], rowFrame.at[0,"score"], rowFrame.at[0,"strand"], rowFrame.at[0,"frame"], rowFrame.at[0,"gene_id"], rowFrame.at[0,"transcript_id"] , k]], columns=['seqname','source','feature', 'start', 'end', 'score', 'strand', 'frame', 'gene_id', 'transcript_id', 'exon_id'])
-                    tempFrame = pd.concat([tempFrame, newRow])
+                    newRow = pandas.DataFrame([[rowFrame.at[0,"seqname"],rowFrame.at[0,"source"],"exon", itemExon[0], itemExon[1], rowFrame.at[0,"score"], rowFrame.at[0,"strand"], rowFrame.at[0,"frame"], rowFrame.at[0,"gene_id"], rowFrame.at[0,"transcript_id"] , k]], columns=['seqname','source','feature', 'start', 'end', 'score', 'strand', 'frame', 'gene_id', 'transcript_id', 'exon_id'])
+                    tempFrame = pandas.concat([tempFrame, newRow])
                     k = k + 1
 
-            rowFrame = pd.concat([rowFrame, tempFrame])
-            chromeFrame = pd.concat([chromeFrame, rowFrame])
+            rowFrame = pandas.concat([rowFrame, tempFrame])
+            chromeFrame = pandas.concat([chromeFrame, rowFrame])
         
-        endFrame = pd.concat([endFrame, chromeFrame ])
+        endFrame = pandas.concat([endFrame, chromeFrame ])
         print(item, end=" ")
         
     endFrame = endFrame.reset_index()
@@ -306,9 +306,9 @@ def smallLarger(givenGTF, exonThreshold):
     ##Create a table with this data
     perfectsiteData = [perfectEnds, perfectStarts]
     perfectsiteTypes = ["Change in End Site", "Change in Start Site"]
-    fullPFrame = pd.DataFrame()
+    fullPFrame = pandas.DataFrame()
     for i in range(len(perfectsiteData)):
-        loopFrame = pd.DataFrame(perfectsiteData[i])
+        loopFrame = pandas.DataFrame(perfectsiteData[i])
         loopFrame["Site Type"] = perfectsiteTypes[i]
         fullPFrame = fullPFrame.append(loopFrame)
     
@@ -658,7 +658,7 @@ def smallLarger(givenGTF, exonThreshold):
     print("max exon change:", max(exonChange))
     print("min exon change:", min(exonChange))
     
-    exondf = pd.DataFrame(exonChange)
+    exondf = pandas.DataFrame(exonChange)
     
     exonQuant = exondf[0].quantile([.1, .25, .5, .75, .9])
     
@@ -689,9 +689,9 @@ def smallLarger(givenGTF, exonThreshold):
     
     siteData = [endChange, startChange]
     siteTypes = ["Difference in End Site", "Difference in Start Site"]
-    fullSFrame = pd.DataFrame()
+    fullSFrame = pandas.DataFrame()
     for i in range(len(siteData)):
-        loopFrame = pd.DataFrame(siteData[i])
+        loopFrame = pandas.DataFrame(siteData[i])
         loopFrame["Site Type"] = siteTypes[i]
         fullSFrame = fullSFrame.append(loopFrame)
 
@@ -750,7 +750,7 @@ def findFusionGenes(matchedTranscriptome, referenceTranscriptome):
     ensemblValues = list(fusionGene.values())
     
     ##begin gathering the other needed data from our fusion gene results
-    dfPract = pd.DataFrame(columns = ["iso", "reference_genes"])
+    dfPract = pandas.DataFrame(columns = ["iso", "reference_genes"])
     dfPract["iso"] = isoValues
     dfPract["reference_genes"] = ensemblValues
     dfPract["strand"] = None
@@ -831,7 +831,7 @@ def transcriptomeMasterFunction2(GTFList, GTFLabels, threshold, distanceThreshol
     strands = ['+', '-']
 
     #Create final dataframe
-    MasterFrameGeneMatch = pd.DataFrame()
+    MasterFrameGeneMatch = pandas.DataFrame()
 
     print("Combining Dataframes:")
     
@@ -839,7 +839,7 @@ def transcriptomeMasterFunction2(GTFList, GTFLabels, threshold, distanceThreshol
         
         for strand in strands:
         
-            workingDataframe = pd.DataFrame()
+            workingDataframe = pandas.DataFrame()
 
             i = 0
             while i < len(GTFList):
@@ -1088,8 +1088,8 @@ def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold,
     counter = 0
 
     #Create final dataframe
-    MasterFrameGeneMatch = pd.DataFrame()
-    MasterFrameGeneMatch2 = pd.DataFrame()
+    MasterFrameGeneMatch = pandas.DataFrame()
+    MasterFrameGeneMatch2 = pandas.DataFrame()
 
     #Check if chromosones don't match
     if sorted(chromosones1) != sorted(chromosones2):
@@ -1458,7 +1458,7 @@ def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceT
     exonMatchedGTF2 = exonMatchedGTF2.drop(columns=['Previously_Matched'])
     exonMatchedGTF2 = exonMatchedGTF2.rename(columns={"new_gene_id": "gene_id", "new_transcript_id": "transcript_id"})
     
-    if isinstance(gtfReference, pd.DataFrame):
+    if isinstance(gtfReference, pandas.DataFrame):
         
         ##Match Gtf to our refernce
         exonMatchedGTF3 = gtfTranscriptomeReference(exonMatchedGTF2, gtfReference, referenceLabel, exonMatchThreshold, distanceThreshold)
@@ -1488,7 +1488,7 @@ def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceT
         doubleMatch = doubleMatch[doubleMatch.astype(str)['Matched_Reference_Gene'] != '[]']
         doubleMatchSize = len(doubleMatch.index)
         
-        #Get amount of gtf that overlapepd a known transcript but did not match anyhting
+        #Get amount of gtf that overlapped a known transcript but did not match anyhting
         transcriptomeOverlap = exonMatchedGTF3[exonMatchedGTF3['Overlap_Ref_Transcript'].map(len) > 0]
         transcriptomeOverlap = transcriptomeOverlap[transcriptomeOverlap['Reference_Transcript_Partial'].map(len) == 0]
         transcriptomeOverlap = transcriptomeOverlap[transcriptomeOverlap['Matched_Reference_Transcript'].map(len) == 0]
@@ -1733,7 +1733,7 @@ def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceT
             nonReferenceSize = len(nonReference.index)
 
             
-            #Get amount of gtf that overlapepd a known transcript but did not match anyhting
+            #Get amount of gtf that overlapped a known transcript but did not match anyhting
             transcriptomeOverlap = oneExonMatchedGTF3[oneExonMatchedGTF3['Overlap_Ref_Transcript'].map(len) > 0]
             transcriptomeOverlap = transcriptomeOverlap[transcriptomeOverlap['Reference_Transcript_Partial'].map(len) == 0]
             transcriptomeOverlap = transcriptomeOverlap[transcriptomeOverlap['Matched_Reference_Transcript'].map(len) == 0]
