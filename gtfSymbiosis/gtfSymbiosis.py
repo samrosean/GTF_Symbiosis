@@ -1,44 +1,92 @@
-##Collapsed Returns (Returns transcripts and genes with a list of exons in those regions)
+import pandas as pd
+import statistics
+import numpy as np
+import ensembl_rest
+import random
+import matplotlib.pyplot as plt
+from matplotlib_venn import venn2
+from matplotlib_venn import venn3
+from pywaffle import Waffle 
+from prettytable import PrettyTable
+import math
+from matplotlib.gridspec import GridSpec
+from copy import deepcopy
+from collections import OrderedDict
+from BCBio import GFF
+from Bio import SeqIO
+from itertools import combinations
+from venn import venn
+import networkx as nx
+import itertools
+from venn import pseudovenn
+from upsetplot import from_contents
+from upsetplot import plot
+from upsetplot import generate_counts
+import os
+import seaborn as sns
+import time
+import collections
+import pyranges as pr
+from matplotlib.pyplot import figure
 
-##Given a GTF Files which contains Transcripts, Genes, Codons, Exons, etc, it finds all exons associated with a transcript
-##and adds them into an exon column
 
-##colFrame --- GTF file dataframe
 
-## The final result will look like:
+
+
+def collapsedReturns(givenGTF):
+    
+    ##givenGTF: A given gtf with exon rows that you wish to collapse into the transcript/gene rows
+    
+    ##The Collapsed Returns function takes a pandas dataframe generated from a GTF and “collapses” it, finding all exon rows for each transcript and then adding their starts and stops as a list in the respective transcript.
+    
+    ## The final result will look like:
     
     ## feature   :   exons
     ##transcript :  [[124,456], [546, 789]]
     ## exon 1
     ## exon 2
 
-def collapsedReturns(colFrame2):
     
-    colFrame2['Exons'] = np.empty((len(colFrame2), 0)).tolist()
+    givenGTF['Exons'] = np.empty((len(givenGTF), 0)).tolist()
     counter = 0
-    while counter < len(colFrame2.index):
+    while counter < len(givenGTF.index):
         
         ##Collect the exons for each transcript
         exons = []
-        if colFrame2.at[counter,"feature"] == "transcript" :
+        if givenGTF.at[counter,"feature"] == "transcript" :
             itterator=1
-            while counter+itterator < len(colFrame2.index) and colFrame2.at[counter+itterator,"feature"] != "transcript":
-                if colFrame2.at[counter+itterator,"feature"] == "exon":
-                    colFrame2.at[counter,"Exons"].append([colFrame2.at[counter+itterator,"start"],colFrame2.at[counter+itterator,"end"]])
+            while counter+itterator < len(givenGTF.index) and givenGTF.at[counter+itterator,"feature"] != "transcript":
+                if givenGTF.at[counter+itterator,"feature"] == "exon":
+                    givenGTF.at[counter,"Exons"].append([givenGTF.at[counter+itterator,"start"],givenGTF.at[counter+itterator,"end"]])
                 itterator=itterator+1
             counter = counter + itterator - 1
         else:
             counter=counter+1
-    return(colFrame2)
-
-##Exon/Splice Junction Matching (returns a list of 0s and 1s coresponding to whether the exons/splice junctions in list1 match any exons/splice junctions in list2, takes a 
-##threshold value which determines how close they can be)
-
-##list1 --- list of exons stored as list of two values [start, stop]
-##list2 --- list of exons stored as list of two values [start, stop]
-##threshold --- distance away between start and stop values that are considered matching
-
+    return(givenGTF)
+    
+    
+    
+    
+    
+    
 def exonMatching(list1, list2, threshold):
+
+    ##Exon/Splice Junction Matching: Given a list of two sets of splice junctions or exons, the function compares the second list against the first, and returns a list of 1s and 0s corresponding to which splice junctions/exons were matched in the first list, where 1 corresponds to a match, and 0 to a non-match.
+
+    ##Example:
+    ##With a given Splice Junction Threshold of 0, and these two lists:
+
+    ##List 1 = [ [10, 15],  [18, 34], [52, 78] ]
+
+    ##List 2 = [ [1, 5],  [52, 78] ]
+
+    ##We can see that only the third item of the first list matches between the two lists. Since the final results are generated in reference to the first list the result will be:
+
+    ##[0, 0, 1]
+
+    ##list1: a list of exons or splice junctions to be matched
+    ##list2: a list of exons or splice junctions to be matched
+    ##threshold: how far the starts and stops can be to be considered a match
     
     itNum = len(list1)
     itNum2 = len(list2)
@@ -55,266 +103,40 @@ def exonMatching(list1, list2, threshold):
             itterator = itterator + 1
             
     return(listofzeroes)
-
-##Start/Stop Matching (Gives the distance between the start and stops of two given exon lists)
-
-##list1 --- list of exons stored as list of two values [start, stop]
-##list2 --- list of exons stored as list of two values [start, stop]
-
-def startStopDistance(list1, list2):
     
-    itNum = len(list1)
-    itNum2 = len(list2)
+def splicJuncColumn(givenGTF):
     
-    if itNum == 1:
-        start1 = list1[0][0]
-        end1 = list1[0][1]
-    else:
-        start1 = list1[0][0]
-        end1 = list1[itNum-1][1]
-        
-    if itNum2 == 1:
-        start2 = list2[0][0]
-        end2 = list2[0][1]
-    else:
-        start2 = list2[0][0]
-        end2 = list2[itNum2-1][1]
-            
-    return [start1-start2, end1-end2]
-
-
-
-##Total Number of Exons
-
-##sumFrame --- GTF dataframe with an exon column
-
-def sumofExons(sumFrame):
+    ##givenGTF: a dataframe which has already been collapsed
     
-    matchSum = 0
-    for index, row in sumFrame.iterrows():
-        if str(sumFrame.at[index,'Exons']) == '[]':
+    ##Splice Junction column Creator: This function is primarily a helper function for gtfTranscriptome, it takes a dataframe with an exon column generated by Collapsed Returns, and creates a new column to contain the splice junctions extracted from those exons.
+    
+    givenGTF['Splice_Junctions'] = np.empty((len(givenGTF), 0)).tolist()
+    for index, row in givenGTF.iterrows():
+        if not givenGTF.at[index,"Exons"]:
             pass
         else:
-            matchSum = matchSum + len(sumFrame.at[index,"Exons"])
-    return matchSum
-
-
-##Returns the number of matched Splice Junctions (matched can occur across matched transcripts i.e: there are two splice junctions, in one matched transcript only the first is matched, in another matched transcript the second splice junction is matched, a matched SJ value of 2 will be returned since both were matched),
-##also returns total number of splice junctions in the given GTF
-
-##sumFrame --- a matched gtf dataframe
-
-def sumTotalSJMatched(sumFrame):
-    
-    matchSum = 0
-    masterSize = 0
-    for index, row in sumFrame.iterrows():
-        if sumFrame.at[index,"Matched_Reference_Gene"]:
-            matchSum = matchSum + len(sumFrame.at[index,"Splice_Junctions"])
-            masterSize = masterSize + len(sumFrame.at[index,"Splice_Junctions"])
-        elif sumFrame.at[index,"Reference_Gene_Partial"]:
-            listG = sumFrame.at[index,"Shared_Ref_Weight"][0][0]
-            masterSize = masterSize + len(sumFrame.at[index,"Splice_Junctions"])
-            i=0
-            while i < len(sumFrame.at[index,"Reference_Transcript_Partial"]):
-                j=0
-                while j < len(sumFrame.at[index,"Splice_Junctions"]):
-                    if sumFrame.at[index,"Shared_Ref_Weight"][i][0][j] == 1:
-                        if listG[j] == 0:
-                            listG[j] = 1
-                    j = j+1
-                i=i+1
-            
-            matchSum = matchSum + sum(list)
-        else:
-            masterSize = masterSize + len(sumFrame.at[index,"Splice_Junctions"])
-            
-            
-    return matchSum, masterSize
-
-##Splice Junction Column Creator: Given an exon column it makes a new splice junction column based on these exons
-
-##sumFrame --- a GTF file that is not yet matched, and has already run through collapsedReturns
-
-def splicJuncColumn(sumFrame):
-    
-    sumFrame['Splice_Junctions'] = np.empty((len(sumFrame), 0)).tolist()
-    for index, row in sumFrame.iterrows():
-        if not sumFrame.at[index,"Exons"]:
-            pass
-        else:
-            if len(sumFrame.at[index,"Exons"]) == 1:
+            if len(givenGTF.at[index,"Exons"]) == 1:
                 pass
-            elif len(sumFrame.at[index,"Exons"]) > 1:
+            elif len(givenGTF.at[index,"Exons"]) > 1:
                 i = 0
-                while i < len(sumFrame.at[index,"Exons"]) - 1:
-                    start = sumFrame.at[index,"Exons"][i][1]
-                    end = sumFrame.at[index,"Exons"][i+1][0]
-                    sumFrame.at[index,"Splice_Junctions"].append([start,end])
+                while i < len(givenGTF.at[index,"Exons"]) - 1:
+                    start = givenGTF.at[index,"Exons"][i][1]
+                    end = givenGTF.at[index,"Exons"][i+1][0]
+                    givenGTF.at[index,"Splice_Junctions"].append([start,end])
                     i = i + 1
             
-    return(sumFrame)
-
-##Splice Junction Missing: Returns 4 numbers which operate as bins. If the first splice junction was unmatched then count1 increases by 1, if any splice junction between (and including) the second splice junction and the middle splice junction are missing count2 increases by 1, and so on where count3 is middle + 1 to second to last, and count4 is the last splice junction. This accounts for negative strand reads by flipping the values.
-
-##sumFrame --- a gtf dataframe which has already gone throuhg best match
-
-
-def splicJuncMissing(sumFrame, ref = False):
+    return(givenGTF)
     
-    indices=[]
     
-    #create new index to help itteration
-    sumFrame = sumFrame.reset_index()
-    sumFrame = sumFrame.drop(columns=['index'])
     
-    if ref == False:
-        sumFrame['Splice_Misses'] = np.zeros((len(sumFrame), 4),dtype=int).tolist()
-        for index, row in sumFrame.iterrows():
-            i = 0
-            while i < len(sumFrame.at[index,"Shared_SJ_Weight"]):
-                if not sumFrame.at[index,"Shared_SJ_Weight"][i][0]:
-                    pass
-                elif str(sumFrame.at[index,"Shared_SJ_Weight"][i][0]) == "[]":
-                    pass
-                elif len(sumFrame.at[index,"Shared_SJ_Weight"][i][0]) == 1 or len(sumFrame.at[index,"Shared_SJ_Weight"][i][0]) == 0:
-                    pass
-                elif len(sumFrame.at[index,"Shared_SJ_Weight"][i][0]) == 2:
-                    if sumFrame.at[index,"Shared_SJ_Weight"][i][0][0] == 0:
-                        sumFrame.at[index,"Splice_Misses"][0] = 1
-                    if sumFrame.at[index,"Shared_SJ_Weight"][i][0][1] == 0:
-                        sumFrame.at[index,"Splice_Misses"][3] = 1
-                    indices.append(index)
-                elif len(sumFrame.at[index,"Shared_SJ_Weight"][i][0]) % 2 == 0:
-                    if sumFrame.at[index,"Shared_SJ_Weight"][i][0][0] == 0:
-                        sumFrame.at[index,"Splice_Misses"][0] = 1
-                    if sumFrame.at[index,"Shared_SJ_Weight"][i][0][len(sumFrame.at[index,"Shared_SJ_Weight"][i][0])-1] == 0:
-                        sumFrame.at[index,"Splice_Misses"][3] = 1
-                    j = 1
-                    while j < len(sumFrame.at[index,"Shared_SJ_Weight"][i][0])/2:
-                        if sumFrame.at[index,"Shared_SJ_Weight"][i][0][j] == 0:
-                            sumFrame.at[index,"Splice_Misses"][1] = 1
-                        if sumFrame.at[index,"Shared_SJ_Weight"][i][0][len(sumFrame.at[index,"Shared_SJ_Weight"][i][0])-j] == 0:
-                            sumFrame.at[index,"Splice_Misses"][2] = 1
-                        j = j + 1
-                    indices.append(index)
-                elif len(sumFrame.at[index,"Shared_SJ_Weight"][i][0]) % 2 != 0:
-                    if sumFrame.at[index,"Shared_SJ_Weight"][i][0][0] == 0:
-                        sumFrame.at[index,"Splice_Misses"][0] = 1
-                    if sumFrame.at[index,"Shared_SJ_Weight"][i][0][len(sumFrame.at[index,"Shared_SJ_Weight"][i][0])-1] == 0:
-                        sumFrame.at[index,"Splice_Misses"][3] = 1
-                    if sumFrame.at[index,"Shared_SJ_Weight"][i][0][math.floor(len(sumFrame.at[index,"Shared_SJ_Weight"][i][0])/2)+1] == 0:
-                        sumFrame.at[index,"Splice_Misses"][1] = 1
-                    j = 1
-                    while j < math.floor(len(sumFrame.at[index,"Shared_SJ_Weight"][i][0])/2):
-                        if sumFrame.at[index,"Shared_SJ_Weight"][i][0][j] == 0:
-                            sumFrame.at[index,"Splice_Misses"][1] = 1
-                        if sumFrame.at[index,"Shared_SJ_Weight"][i][0][len(sumFrame.at[index,"Shared_SJ_Weight"][i][0])-j] == 0:
-                            sumFrame.at[index,"Splice_Misses"][2] = 1
-                        j = j + 1
-                    indices.append(index)
-                i = i + 1
-
-        sumFrame2 = sumFrame.iloc[indices,]
-        count1 = 0
-        count2 = 0
-        count3 = 0
-        count4 = 0
-
-        sumFrame2 = sumFrame2.reset_index()
-        sumFrame2 = sumFrame2.drop(columns=['index'])
-
-        for index, row in sumFrame2.iterrows():
-            if sumFrame2.at[index, "strand"] == "-":
-                sumFrame2.at[index,"Splice_Misses"] = sumFrame2.at[index,"Splice_Misses"][::-1]
-            if sumFrame2.at[index,"Splice_Misses"][0] == 1:
-                count1 = count1 + 1
-            if sumFrame2.at[index,"Splice_Misses"][1] == 1:
-                count2 = count2 + 1
-            if sumFrame2.at[index,"Splice_Misses"][2] == 1:
-                count3 = count3 + 1
-            if sumFrame2.at[index,"Splice_Misses"][3] == 1:
-                count4 = count4 + 1
-        return count1, count2, count3, count4
     
-    elif ref == True:
-        
-        sumFrame['Splice_Misses'] = np.zeros((len(sumFrame), 4),dtype=int).tolist()
-        for index, row in sumFrame.iterrows():
-            i = 0
-            while i < len(sumFrame.at[index,"Shared_Ref_Weight"]):
-                if not sumFrame.at[index,"Shared_Ref_Weight"][i][0]:
-                    pass
-                elif str(sumFrame.at[index,"Shared_Ref_Weight"][i][0]) == "[]":
-                    pass
-                elif len(sumFrame.at[index,"Shared_Ref_Weight"][i][0]) == 1 or len(sumFrame.at[index,"Shared_Ref_Weight"][i][0]) == 0:
-                    pass
-                elif len(sumFrame.at[index,"Shared_Ref_Weight"][i][0]) == 2:
-                    if sumFrame.at[index,"Shared_Ref_Weight"][i][0][0] == 0:
-                        sumFrame.at[index,"Splice_Misses"][0] = 1
-                    if sumFrame.at[index,"Shared_Ref_Weight"][i][0][1] == 0:
-                        sumFrame.at[index,"Splice_Misses"][3] = 1
-                    indices.append(index)
-                elif len(sumFrame.at[index,"Shared_Ref_Weight"][i][0]) % 2 == 0:
-                    if sumFrame.at[index,"Shared_Ref_Weight"][i][0][0] == 0:
-                        sumFrame.at[index,"Splice_Misses"][0] = 1
-                    if sumFrame.at[index,"Shared_Ref_Weight"][i][0][len(sumFrame.at[index,"Shared_Ref_Weight"][i][0])-1] == 0:
-                        sumFrame.at[index,"Splice_Misses"][3] = 1
-                    j = 1
-                    while j < len(sumFrame.at[index,"Shared_Ref_Weight"][i][0])/2:
-                        if sumFrame.at[index,"Shared_Ref_Weight"][i][0][j] == 0:
-                            sumFrame.at[index,"Splice_Misses"][1] = 1
-                        if sumFrame.at[index,"Shared_Ref_Weight"][i][0][len(sumFrame.at[index,"Shared_Ref_Weight"][i][0])-j] == 0:
-                            sumFrame.at[index,"Splice_Misses"][2] = 1
-                        j = j + 1
-                    indices.append(index)
-                elif len(sumFrame.at[index,"Shared_Ref_Weight"][i][0]) % 2 != 0:
-                    if sumFrame.at[index,"Shared_Ref_Weight"][i][0][0] == 0:
-                        sumFrame.at[index,"Splice_Misses"][0] = 1
-                    if sumFrame.at[index,"Shared_Ref_Weight"][i][0][len(sumFrame.at[index,"Shared_Ref_Weight"][i][0])-1] == 0:
-                        sumFrame.at[index,"Splice_Misses"][3] = 1
-                    if sumFrame.at[index,"Shared_Ref_Weight"][i][0][math.floor(len(sumFrame.at[index,"Shared_Ref_Weight"][i][0])/2)+1] == 0:
-                        sumFrame.at[index,"Splice_Misses"][1] = 1
-                    j = 1
-                    while j < math.floor(len(sumFrame.at[index,"Shared_Ref_Weight"][i][0])/2):
-                        if sumFrame.at[index,"Shared_Ref_Weight"][i][0][j] == 0:
-                            sumFrame.at[index,"Splice_Misses"][1] = 1
-                        if sumFrame.at[index,"Shared_Ref_Weight"][i][0][len(sumFrame.at[index,"Shared_Ref_Weight"][i][0])-j] == 0:
-                            sumFrame.at[index,"Splice_Misses"][2] = 1
-                        j = j + 1
-                    indices.append(index)
-                i = i + 1
-
-        sumFrame2 = sumFrame.iloc[indices,]
-        count1 = 0
-        count2 = 0
-        count3 = 0
-        count4 = 0
-
-        sumFrame2 = sumFrame2.reset_index()
-        sumFrame2 = sumFrame2.drop(columns=['index'])
-
-        for index, row in sumFrame2.iterrows():
-            if sumFrame2.at[index, "strand"] == "-":
-                sumFrame2.at[index,"Splice_Misses"] = sumFrame2.at[index,"Splice_Misses"][::-1]
-            if sumFrame2.at[index,"Splice_Misses"][0] == 1:
-                count1 = count1 + 1
-            if sumFrame2.at[index,"Splice_Misses"][1] == 1:
-                count2 = count2 + 1
-            if sumFrame2.at[index,"Splice_Misses"][2] == 1:
-                count3 = count3 + 1
-            if sumFrame2.at[index,"Splice_Misses"][3] == 1:
-                count4 = count4 + 1
-        return count1, count2, count3, count4
-
-    else:
-        print("ref variable must equal True or False")
-
-##Reformat Exons: re-adds the exon rows to final output to allow for exporting as a usable GTF.
-        
-##startFrame: the collapsed dataframe which you wish to readd the exon rows to
-        
+    
+   
 def reformatExons(startFrame):
+    
+    ##startFrame: the collapsed dataframe that you wish to create the exon rows for
+    
+    ##Reformat For Exporting: For most of the operations and analysis of gtfTranscriptome the assembled transcriptome stores exons as a column value for each transcript. The complete dataframe returned by gtfTranscriptome is also done in this format, however gtfs are not conventionally viewed or stored in this way. reformatExons creates the exon rows a gtf traditionally has by creating a new row for each exon stored for every transcript.
     
     endFrame = pd.DataFrame()
     
@@ -325,9 +147,10 @@ def reformatExons(startFrame):
     if 'MT' in chromosones1:
         mtLoc = True
         
-    
-    chromosones1.remove('X')
-    chromosones1.remove('Y')
+    if 'X' in chromosones1:
+        chromosones1.remove('X')
+    if 'Y' in chromosones1:
+        chromosones1.remove('Y')
     if mtLoc == True:
         chromosones1.remove('MT')
     
@@ -386,16 +209,19 @@ def reformatExons(startFrame):
     endFrame = endFrame.drop(columns=['index'])
     
     return(endFrame)
-        
-##Write GTF: saves a GTF dataframe as a gtf file
-
-## name --- the name you wish to name the file as
-
-## givenGTF --- the gtf file which you want to save
-
-##extraColumns --- a flag to indicate whether you wish to print more than the basic 11 columns (true will print the extra columns)
-
+    
+    
+    
+   
+    
+    
 def writeGTF(name, givenGTF, extraColumns = True):
+
+    ##Takes a pandas dataframe storing gtf equivalent data and writes it as a gtf file to the current working directory.  
+    
+    ##name: the filename you wish to write the reuslt as
+    ##givenGTF: the dataframe you wish to print as a gtf
+    ##extraColumns: a flag to indicate whether you wish to print more than the basic 11 columns (true will print the extra columns)
     
     correctColumns = ["seqname", "source", "feature", "start", "end", "score", "strand", "frame", "gene_id", "transcript_id", "exon_id" ]
     
@@ -430,20 +256,32 @@ def writeGTF(name, givenGTF, extraColumns = True):
             
             string = string + "\n"
             fh.write(string)
-            
-## Smaller or Larger Compared To Reference --- (a function to characterize and compare how a transcript compares to a reference, wether transcripts are on average smaller or larger)
 
-##givenGtf - the gtf dataframe which has already been matched to a reference
-##exonThreshold -- distance you qualify as being longer or shorter
-                        
+
+
+
+
+
+
+
+
 def smallLarger(givenGTF, exonThreshold):
+
+    ##Smaller or Larger:A function to characterize the similarities and differences between transcripts from our assembled transcriptome with transcripts they matched in the reference. Specifically it looks at transcripts from our assembled transcriptome which partially matched with a reference transcript but did not have a perfect match with a reference transcript. It then characterizes the differences in start and stop sites as well as any differences in starting and stopping exons. 
     
+    ##givenGTF: a gtf which has been comapred to a reference which you wish to characterize
+    ##exonThreshold: how much larger does a read have to be compared to another to be considered a "larger" transcript, and vice versa for "smaller"
+    
+    ##get the change in start and stop for perfect matches to annotation
     perfectEnds = []
     perfectStarts = []
     
     for index, row in givenGTF.iterrows():
+        
+        ##if theres a perfect match then add the starts and stops to the perfect match value
         for item in givenGTF.at[index, 'Matched_Ref_Start_Stop']:
             
+            ##flip values if on negative strand
             if givenGTF.at[index, 'strand'] == "-":
                 perfectEnds.append(-item[0])
                 perfectStarts.append(item[1])
@@ -451,6 +289,7 @@ def smallLarger(givenGTF, exonThreshold):
                 perfectStarts.append(-item[0])
                 perfectEnds.append(item[1])
                 
+        #if not a perfect match, but all splice junctions match, also add it to the perfect start and stop values
         for item in givenGTF.at[index, 'Shared_Ref_Weight']:
             matchedLen = len(givenGTF.at[index, 'Exons'])
             refLen = len(item[0])
@@ -464,7 +303,7 @@ def smallLarger(givenGTF, exonThreshold):
                     perfectStarts.append(item[1][0] - givenGTF.at[index, 'start'])
                     perfectEnds.append(givenGTF.at[index, 'end'] - item[1][1])
                 
-    
+    ##Create a table with this data
     perfectsiteData = [perfectEnds, perfectStarts]
     perfectsiteTypes = ["Change in End Site", "Change in Start Site"]
     fullPFrame = pd.DataFrame()
@@ -474,17 +313,15 @@ def smallLarger(givenGTF, exonThreshold):
         fullPFrame = fullPFrame.append(loopFrame)
     
     
-    
+    ##change column name to be base pair change
     fullPFrame = fullPFrame.rename(columns={0: "Base Pair Change"})
     
-    plt.figure(figsize=(20, 10))
-    sns.set(font_scale=2)
-    ax = sns.violinplot(x= "Site Type", y="Base Pair Change", data=fullPFrame, inner="quartile")
+    #plt.figure(figsize=(20, 10))
+    #sns.set(font_scale=2)
+    #ax = sns.violinplot(x= "Site Type", y="Base Pair Change", data=fullPFrame, inner="quartile")
     
-    plt.show()
+    #plt.show()
     
-    ##givenGTF: a gtf which has been comapred to a reference which you wish to characterize
-    ##exonThreshold: how much larger does a read have to be compared to another to be considered a "larger" transcript, and vice versa for "smaller"
     
     #Select a gtf with only partial matches
     matchGTF  = givenGTF[givenGTF.astype(str)['Shared_Ref_Weight'] != '[]']
@@ -521,24 +358,56 @@ def smallLarger(givenGTF, exonThreshold):
 
     print("From this point on only single partial match transcripts will be used.")
     
-    #create values for counts and list to contain differences
+    #create values for counts and list to contain differences of exons past or before reference read
     startBigger = 0
-    endBigger = 0
     startSmaller = 0
+    startSame = 0
+    
+    endBigger = 0
     endSmaller = 0
+    endSame = 0
+
+    
     endChange = []
     startChange = []
     
+    #create values for counts and list to contain differences
     #Size of the single matches
     totalCount = singleMatchCount
     
     #counts and lists for exon differences
     longer = 0
     shorter = 0
+    same = 0
+    sameExonMatch = 0
+    sameExonChange = 0
     exonChange = []
+    
+    endLengthLonger = 0
+    endLengthShorter = 0
+    endLengthSame = 0
+    
+    endLongerSameExon = 0
+    endLongerDiffExon = 0
+    endShorterSameExon = 0
+    endShorterDiffExon = 0
+    endSameSameExon = 0
+    endSameDiffExon = 0
+    
+    startLengthLonger = 0
+    startLengthShorter = 0
+    startLengthSame = 0
+    
+    startLongerSameExon = 0
+    startLongerDiffExon = 0
+    startShorterSameExon = 0
+    startShorterDiffExon = 0
+    startSameSameExon = 0
+    startSameDiffExon = 0
     
     zeroExon = []
     zeroExon2 = []
+    
     
     
     for index, row in singleMatchGTF.iterrows():
@@ -546,56 +415,245 @@ def smallLarger(givenGTF, exonThreshold):
             matchedLen = len(singleMatchGTF.at[index, 'Exons'])
             refLen = len(item[0])
             
+            
+            ##catalog change in exon numbers
             exonChange.append(matchedLen-refLen)
             if matchedLen > refLen:
                 longer = longer + 1
             elif matchedLen < refLen:
                 shorter = shorter + 1
+            elif matchedLen==refLen:
+                same = same + 1
+                if sum(item[2]) == matchedLen-1:
+                    sameExonMatch = sameExonMatch + 1
+                else:
+                    sameExonChange = sameExonChange + 1
             
+            ##Catalog changes in length
             if singleMatchGTF.at[index, 'strand'] == "-":
+                
+                tempEnd = item[1][0] - singleMatchGTF.at[index, 'start']
+                tempStart = singleMatchGTF.at[index, 'end'] - item[1][1]
                 endChange.append(item[1][0] - singleMatchGTF.at[index, 'start'])
                 startChange.append(singleMatchGTF.at[index, 'end'] - item[1][1])
+                
+                if tempEnd > 0:
+                    endLengthLonger = endLengthLonger + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            endLongerSameExon = endLongerSameExon + 1
+                        else:
+                            endLongerDiffExon = endLongerDiffExon + 1
+                    else:
+                        endLongerDiffExon = endLongerDiffExon + 1
+                
+                if tempEnd < 0:
+                    endLengthShorter = endLengthShorter + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            endShorterSameExon = endShorterSameExon + 1
+                        else:
+                            endShorterDiffExon = endShorterDiffExon + 1
+                    else:
+                        endShorterDiffExon = endShorterDiffExon + 1
+                        
+                if tempEnd == 0:
+                    endLengthSame = endLengthSame +1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            endSameSameExon = endSameSameExon + 1
+                        else:
+                            endSameDiffExon = endSameDiffExon + 1
+                    else:
+                        endSameDiffExon = endSameDiffExon + 1
+                        
+                if tempStart > 0:
+                    startLengthLonger = startLengthLonger + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            startLongerSameExon = startLongerSameExon + 1
+                        else:
+                            startLongerDiffExon = startLongerDiffExon + 1
+                    else:
+                        startLongerDiffExon = startLongerDiffExon + 1
+                
+                if tempStart < 0:
+                    startLengthShorter = startLengthShorter + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            startShorterSameExon = startShorterSameExon + 1
+                        else:
+                            startShorterDiffExon = startShorterDiffExon + 1 
+                    else:
+                        startShorterDiffExon = startShorterDiffExon + 1   
+                
+                if tempStart == 0:
+                    startLengthSame = startLengthSame + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            startSameSameExon = startSameSameExon + 1
+                        else:
+                            startSameDiffExon = startSameDiffExon + 1
+                    else:
+                        startSameDiffExon = startSameDiffExon + 1
+                    
             else:
+                tempStart = item[1][0] - singleMatchGTF.at[index, 'start']
+                tempEnd = singleMatchGTF.at[index, 'end'] - item[1][1]
                 startChange.append(item[1][0] - singleMatchGTF.at[index, 'start'])
                 endChange.append(singleMatchGTF.at[index, 'end'] - item[1][1])
                 
+                if tempEnd > 0:
+                    endLengthLonger = endLengthLonger + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            endLongerSameExon = endLongerSameExon + 1
+                        else:
+                            endLongerDiffExon = endLongerDiffExon + 1
+                    else:
+                        endLongerDiffExon = endLongerDiffExon + 1
+                
+                if tempEnd < 0:
+                    endLengthShorter = endLengthShorter + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            endShorterSameExon = endShorterSameExon + 1
+                        else:
+                            endShorterDiffExon = endShorterDiffExon + 1
+                    else:
+                        endShorterDiffExon = endShorterDiffExon + 1
+                        
+                if tempEnd == 0:
+                    endLengthSame = endLengthSame +1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            endSameSameExon = endSameSameExon + 1
+                        else:
+                            endSameDiffExon = endSameDiffExon + 1
+                    else:
+                        endSameDiffExon = endSameDiffExon + 1
+                        
+                if tempStart > 0:
+                    startLengthLonger = startLengthLonger + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            startLongerSameExon = startLongerSameExon + 1
+                        else:
+                            startLongerDiffExon = startLongerDiffExon + 1
+                    else:
+                        startLongerDiffExon = startLongerDiffExon + 1
+                
+                if tempStart < 0:
+                    startLengthShorter = startLengthShorter + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            startShorterSameExon = startShorterSameExon + 1
+                        else:
+                            startShorterDiffExon = startShorterDiffExon + 1 
+                    else:
+                        startShorterDiffExon = startShorterDiffExon + 1   
+                
+                if tempStart == 0:
+                    startLengthSame = startLengthSame + 1
+                    if matchedLen==refLen:
+                        if sum(item[2]) == matchedLen-1:
+                            startSameSameExon = startSameSameExon + 1
+                        else:
+                            startSameDiffExon = startSameDiffExon + 1
+                    else:
+                        startSameDiffExon = startSameDiffExon + 1
             
+            
+            ##Catolog change in exon locations
             if (item[0][0][0] - singleMatchGTF.at[index, 'Exons'][0][1] >= exonThreshold):
                 if singleMatchGTF.at[index, 'strand'] == "-":
                     endBigger = endBigger+1
                 else:
                     startBigger = startBigger+1
-                
+                    
+            elif (singleMatchGTF.at[index, 'Exons'][0][0] - item[0][0][1] >= exonThreshold):
+                if singleMatchGTF.at[index, 'strand'] == "-":
+                    endSmaller = endSmaller+1
+                else:
+                    startSmaller = startSmaller+1
+            else:
+                if singleMatchGTF.at[index, 'strand'] == "-":
+                    endSame = endSame+1
+                else:
+                    startSame = startSame+1
+                    
             if (singleMatchGTF.at[index, 'Exons'][matchedLen-1][0] - item[0][refLen-1][1]>= exonThreshold):
                 if singleMatchGTF.at[index, 'strand'] == "-":
                     startBigger = startBigger+1
                 else:
                     endBigger = endBigger+1
                     
-            if (singleMatchGTF.at[index, 'Exons'][0][0] - item[0][0][1] >= exonThreshold):
+            elif (item[0][refLen-1][0] - singleMatchGTF.at[index, 'Exons'][matchedLen-1][1] >= exonThreshold):
                 if singleMatchGTF.at[index, 'strand'] == "-":
-                    endSmaller = endSmaller+1
-                else:
                     startSmaller = startSmaller+1
+                else:
+                    endSmaller = endSmaller+1
                     
-            if (item[0][refLen-1][0] - singleMatchGTF.at[index, 'Exons'][matchedLen-1][1] >= exonThreshold):
+            else:
                 if singleMatchGTF.at[index, 'strand'] == "-":
-                    startSmaller = startSmaller+1
+                    startSame = startSame+1
                 else:
-                    endSmaller = endSmaller+1
+                    endSame = endSame+1
                     
     #Print another table of the results so far                
     t = PrettyTable(['Name', 'Amount', 'Percent'])
     t.add_row(['Total Partial Matches', totalCount, 100])
     t.add_row(['More Exons (Count)', longer, round(((longer)/totalCount)*100, 3)])
     t.add_row(['Less Exons (Count)', shorter, round(((shorter)/totalCount)*100, 3)])
-    t.add_row(['Longer End (Exon Past Reference Read End)', endBigger, round(((endBigger)/totalCount)*100, 3)])
-    t.add_row(['Shorter End (Refernce Exon Past Read End)', endSmaller, round(((endSmaller)/totalCount)*100, 3)])
-    t.add_row(['Longer Start (Exon Past Reference Read Start)', startBigger, round(((startBigger)/totalCount)*100, 3)])
-    t.add_row(['Shorter Start (Refernce Exon Past Read Start)', startSmaller, round(((startSmaller)/totalCount)*100, 3)])
+    t.add_row(['Same Exons (Count)', same, round(((same)/totalCount)*100, 3)])
+    t.add_row(['Same Exons (Same Splice Junctions (Count))', sameExonMatch, round(((sameExonMatch)/totalCount)*100, 3)])
+    t.add_row(['Same Exons (Diff Splice Junctions (Count))', sameExonChange, round(((sameExonChange)/totalCount)*100, 3)])
     print("\n")
     print(t)
     
+    t = PrettyTable(['Name', 'Amount', 'Percent'])
+    t.add_row(['Total Partial Matches', totalCount, 100])
+    t.add_row(['Longer End (Count)', endLengthLonger, round(((endLengthLonger)/totalCount)*100, 3)])
+    t.add_row(['Longer End (Same Splice Junctions) (Count)', endLongerSameExon, round(((endLongerSameExon)/totalCount)*100, 3)])
+    t.add_row(['Longer End (Diff Splice Junctions) (Count)', endLongerDiffExon, round(((endLongerDiffExon)/totalCount)*100, 3)])
+    t.add_row(['Shorter End (Count)', endLengthShorter, round(((endLengthShorter)/totalCount)*100, 3)])
+    t.add_row(['Shorter End (Same Splice Junctions (Count))', endShorterSameExon, round(((endShorterSameExon)/totalCount)*100, 3)])
+    t.add_row(['Shorter End (Diff Splice Junctions (Count))', endShorterDiffExon, round(((endShorterDiffExon)/totalCount)*100, 3)])
+    t.add_row(['Same End (Count)', endLengthSame, round(((endLengthSame)/totalCount)*100, 3)])
+    t.add_row(['Same End (Same Splice Junctions (Count))', endSameSameExon, round(((endSameSameExon)/totalCount)*100, 3)])
+    t.add_row(['Same End (Diff Splice Junctions (Count))', endSameDiffExon, round(((endSameDiffExon)/totalCount)*100, 3)])
+    print("\n")
+    print(t)
+    
+    t = PrettyTable(['Name', 'Amount', 'Percent'])
+    t.add_row(['Total Partial Matches', totalCount, 100])
+    t.add_row(['Longer Start (Count)', startLengthLonger, round(((startLengthLonger)/totalCount)*100, 3)])
+    t.add_row(['Longer Start (Same Splice Junctions) (Count)', startLongerSameExon, round(((startLongerSameExon)/totalCount)*100, 3)])
+    t.add_row(['Longer Start (Diff Splice Junctions) (Count)', startLongerDiffExon, round(((startLongerDiffExon)/totalCount)*100, 3)])
+    t.add_row(['Shorter Start (Count)', startLengthShorter, round(((startLengthShorter)/totalCount)*100, 3)])
+    t.add_row(['Shorter Start (Same Splice Junctions (Count))', startShorterSameExon, round(((startShorterSameExon)/totalCount)*100, 3)])
+    t.add_row(['Shorter Start (Diff Splice Junctions (Count))', startShorterDiffExon, round(((startShorterDiffExon)/totalCount)*100, 3)])
+    t.add_row(['Same Start (Count)', startLengthSame, round(((startLengthSame)/totalCount)*100, 3)])
+    t.add_row(['Same Start (Same Splice Junctions (Count))', startSameSameExon, round(((startSameSameExon)/totalCount)*100, 3)])
+    t.add_row(['Same Start (Diff Splice Junctions (Count))', startSameDiffExon, round(((startSameDiffExon)/totalCount)*100, 3)])
+    print("\n")
+    print(t)
+    
+    t = PrettyTable(['Name', 'Amount', 'Percent'])
+    t.add_row(['Longer End (Exon Past Reference Read End)', endBigger, round(((endBigger)/totalCount)*100, 3)])
+    t.add_row(['Shorter End (Refernce Exon Past Read End)', endSmaller, round(((endSmaller)/totalCount)*100, 3)])
+    t.add_row(['Same End (No Exon Past Reference End or Reference Exon Past Read End)', endSame, round(((endSame)/totalCount)*100, 3)])
+    t.add_row(['Longer Start (Exon Past Reference Read Start)', startBigger, round(((startBigger)/totalCount)*100, 3)])
+    t.add_row(['Shorter Start (Refernce Exon Past Read Start)', startSmaller, round(((startSmaller)/totalCount)*100, 3)])
+    t.add_row(['Same Start (No Exon Past Reference Start or Reference Exon Past Read Start)', startSame, round(((startSame)/totalCount)*100, 3)])
+    print("\n")
+    print(t)
+    
+    print("\n")
+    
+    print("Overall Exon Change Analysis:")
+    
+    print("\n")
     
     print("max exon change:", max(exonChange))
     print("min exon change:", min(exonChange))
@@ -604,8 +662,9 @@ def smallLarger(givenGTF, exonThreshold):
     
     exonQuant = exondf[0].quantile([.1, .25, .5, .75, .9])
     
-    print("Exon Quantitles:")
+    print("Exon Change Quantitles:")
     print(exonQuant)
+    
     
     plt.figure(figsize=(20, 10))
     sns.set(font_scale=2)
@@ -615,6 +674,12 @@ def smallLarger(givenGTF, exonThreshold):
     
     plt.show()
     
+    print("\n")
+    
+    print("Overall Start and Stop Change Analysis:")
+    
+    print("\n")
+    
     print("max start change:", max(startChange))
     print("min start change:", min(startChange))
     
@@ -623,34 +688,129 @@ def smallLarger(givenGTF, exonThreshold):
     
     
     siteData = [endChange, startChange]
-    siteTypes = ["Change in End Site", "Change in Start Site"]
+    siteTypes = ["Difference in End Site", "Difference in Start Site"]
     fullSFrame = pd.DataFrame()
     for i in range(len(siteData)):
         loopFrame = pd.DataFrame(siteData[i])
         loopFrame["Site Type"] = siteTypes[i]
         fullSFrame = fullSFrame.append(loopFrame)
 
-    fullSFrame = fullSFrame.rename(columns={0: "Base Pair Change"})
+    fullSFrame = fullSFrame.rename(columns={0: "# of Base Pair Difference"})
     
     plt.figure(figsize=(20, 10))
     sns.set(font_scale=2)
     ax = sns.violinplot(x= "Site Type", y="Base Pair Change", data=fullSFrame, inner="quartile")
     
-    plt.show()                     
+    plt.show()
+    
+            
+            
+            
+     
+     
+     
+     
+ 
+ 
+ 
 
 
-##Transcriptome Master Function: Constructs a Transcriptome from a list of GTFs
+def findFusionGenes(matchedTranscriptome, referenceTranscriptome):
+    
+    ###Check if any of our generated transcriptome genes span multiple genes from the reference transcriptome (reuqires that gtfTranscriptme was ran with a reference transcriptome)
+    ##matchedTranscriptome - the transcriptome returned from the gtfTranscriptome function
+    ##referenceTranscriptome - the transcriptome we used to align the gtf originally (though this isnt needed to see multiple genes are spanned by an iso-seq gene, we use it to get the start and stops, as well as strands of the ensembl genes)
+    
+    #get only the transcripts from our reference transcriptome
+    referenceTranscripts = referenceTranscriptome[referenceTranscriptome["feature"]=="transcript"]
 
-##gtfList --- an array of gtfs which you wish to be combined
-
-##gtfLabels --- an array of the associated name you wish to label each GTF
-
-##threshold --- threshold you consider acceptable for distance between splice junction start and stops to be counted as a match
-
-##distanceThreshold --- threshold you consider acceptable between start and stop sites to be counted as a match
-
-
-def transcriptomeMasterFunction2(GTFList, GTFLabels, threshold, distanceThreshold):
+    matchedTranscriptome[matchedTranscriptome["Matched_Reference_Gene"] != "[]"]
+    
+    ##create dictionary of every iso-seq gene
+    lengthGeneNames = len(list(set(matchedTranscriptome["gene_id"])))
+    geneDict = {}
+    
+    for item in list(set(matchedTranscriptome["gene_id"])):
+        geneDict[item] = []
+    
+    #Add Each connection from our data
+    for index, row in matchedTranscriptome.iterrows():
+        for item in matchedTranscriptome.at[index, "Matched_Reference_Gene"]:
+            if item is not None:
+                geneDict[matchedTranscriptome.at[index, "gene_id"]].append(item)
+                geneDict[matchedTranscriptome.at[index, "gene_id"]] = list(set(geneDict[matchedTranscriptome.at[index, "gene_id"]]))
+             
+    #find the fusion genes
+    fusionGene = {}
+    for key in geneDict:
+        if len(geneDict[key]) > 1:
+            fusionGene[key] = geneDict[key]
+            
+    isoValues = list(fusionGene.keys())
+    ensemblValues = list(fusionGene.values())
+    
+    ##begin gathering the other needed data from our fusion gene results
+    dfPract = pd.DataFrame(columns = ["iso", "reference_genes"])
+    dfPract["iso"] = isoValues
+    dfPract["reference_genes"] = ensemblValues
+    dfPract["strand"] = None
+    dfPract["chr"] = None
+    dfPract["Splice_Junctions"] = np.empty((len(dfPract), 0)).tolist()
+    dfPract["start"] = None
+    dfPract["end"] = None
+    dfPract['ref_location'] = np.empty((len(dfPract), 0)).tolist()
+    dfPract['ref_chrs'] = np.empty((len(dfPract), 0)).tolist()
+    dfPract['ref_strands'] = np.empty((len(dfPract), 0)).tolist()
+    dfPract['overlap'] = False
+    
+    ##for each fusion gene collect that needed data
+    for index, row in dfPract.iterrows():
+        
+        ##add the smallest start and the largest end
+        dfPract.at[index, "start"] = min(list(matchedTranscriptome[matchedTranscriptome["gene_id"] == dfPract.at[index, "iso"]]["start"]))
+        dfPract.at[index, "end"] = max(list(matchedTranscriptome[matchedTranscriptome["gene_id"] == dfPract.at[index, "iso"]]["end"]))
+        
+        ##add every uniqe strand and chr in the gene set to see if any cross chromosone or strand results are occuring
+        dfPract.at[index, "chr"] = list(set(list(matchedTranscriptome[matchedTranscriptome["gene_id"] == dfPract.at[index, "iso"]]["seqname"])))
+        dfPract.at[index, "strand"] = list(set(list(matchedTranscriptome[matchedTranscriptome["gene_id"] == dfPract.at[index, "iso"]]["strand"])))
+        
+        ##get all splice junctions and then flatten the list
+        sjList = list(matchedTranscriptome[matchedTranscriptome["gene_id"] == dfPract.at[index, "iso"]]["Splice_Junctions"])
+        sjList = [item for sublist in sjList for item in sublist]
+        
+        ##add the splice junctions
+        dfPract.at[index, "Splice_Junctions"].extend(sjList)
+        
+        ##add in the data for the reference gene
+        for item in dfPract.at[index, "reference_genes"]:
+            dfPract.at[index, 'ref_location'].append([min(list(referenceTranscriptome[(referenceTranscriptome["gene_id"] == item) & (referenceTranscriptome["feature"] == "transcript")]["start"])), max(list(referenceTranscriptome[(referenceTranscriptome["gene_id"] == item) & (referenceTranscriptome["feature"] == "transcript")]["end"]))])
+            dfPract.at[index, 'ref_chrs'].append(set(list(referenceTranscriptome[referenceTranscriptome["gene_id"] == item]["seqname"])))
+            dfPract.at[index, 'ref_strands'].append(set(list(referenceTranscriptome[referenceTranscriptome["gene_id"] == item]["strand"])))
+        
+        for i in range(len(dfPract.at[index, 'ref_location'])-1):
+            if ((dfPract.at[index, 'ref_location'][i][0] <= dfPract.at[index, 'ref_location'][i+1][1]) & (dfPract.at[index, 'ref_location'][i+1][0] <= dfPract.at[index, 'ref_location'][i][1])):
+                dfPract.at[index, 'overlap'] = True
+            
+        
+        ##make sure the reference genes are in order from smallest location to largest location
+        Exons1 = dfPract.at[index,"ref_location"]
+        dfPract.at[index,"ref_location"] = sorted(Exons1)
+            
+    return(dfPract)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+def transcriptomeMasterFunction2(GTFList, GTFLabels, threshold, distanceThreshold, collapse = True):
     
     if len(GTFList) <= 1:
         print("At least two GTFs are required to assemble transcriptome")
@@ -668,214 +828,256 @@ def transcriptomeMasterFunction2(GTFList, GTFLabels, threshold, distanceThreshol
             
     ###Create an array of each GTFs chromosones
     chromosones1 = GTFList[0].seqname.unique().tolist()
+    strands = ['+', '-']
 
     #Create final dataframe
     MasterFrameGeneMatch = pd.DataFrame()
 
     print("Combining Dataframes:")
-
-    
     
     for item in chromosones1:
         
-        workingDataframe = pd.DataFrame()
+        for strand in strands:
         
-        i = 0
-        while i < len(GTFList):
-            
-            #Choose GTF to work with
-            mainGTF = GTFList[i]
-            
-            #Select only the current Chromosone
-            chromeFrame1 = mainGTF[mainGTF["seqname"] == item]
-            
-            ##Create a list of Column Names to resort at end
-            columnNames1 = chromeFrame1.columns.tolist()
+            workingDataframe = pd.DataFrame()
 
-            #create new index to help itteration
-            chromeFrame1 = chromeFrame1.reset_index()
-            chromeFrame1 = chromeFrame1.drop(columns=['index'])
+            i = 0
+            while i < len(GTFList):
 
-            #Create Exon Column to compare
-            chromeFrame1 = collapsedReturns(chromeFrame1)         
+                #Choose GTF to work with
+                mainGTF = GTFList[i]
 
-            #Look at only transcripts
-            chromeFrame1 = chromeFrame1[chromeFrame1["feature"] == "transcript"]
-            for index, row in chromeFrame1.iterrows():
-                if 'transcript_name' in chromeFrame1.columns:
-                    chromeFrame1.at[index, "gene_id"] = chromeFrame1.at[index, "transcript_name"] + "/" + GTFLabels[i] + "-" + str(item) + str(index)
+                #Select only the current Chromosone
+                chromeFrame1 = mainGTF[mainGTF["seqname"] == item]
+                
+                #Select only the current Strand
+                chromeFrame1 = chromeFrame1[chromeFrame1["strand"] == strand]
+
+                ##Create a list of Column Names to resort at end
+                columnNames1 = chromeFrame1.columns.tolist()
+
+                #create new index to help itteration
+                chromeFrame1 = chromeFrame1.reset_index()
+                chromeFrame1 = chromeFrame1.drop(columns=['index'])
+                
+                ##collapse unless told not to
+                if collapse == True or collapse[i] == 0:
+                    #Create Exon Column to compare
+                    chromeFrame1 = collapsedReturns(chromeFrame1)       
+                    
+
+                #Look at only transcripts
+                chromeFrame1 = chromeFrame1[chromeFrame1["feature"] == "transcript"]
+                for index, row in chromeFrame1.iterrows():
+                    if 'transcript_name' in chromeFrame1.columns:
+                        chromeFrame1.at[index, "gene_id"] = chromeFrame1.at[index, "transcript_name"] + "/" + GTFLabels[i] + "-" + str(item) + "\"" + str(index) + "$"  + str(random.randint(0,9)) # + str(strand)
+                    else:
+                        chromeFrame1.at[index, "gene_id"] = chromeFrame1.at[index, "transcript_id"] + "/" + GTFLabels[i] + "-" + str(item) + "\"" + str(index) + "$" + str(random.randint(0,9)) # + str(strand)
+                if collapse == True or collapse[i] == 0:
+                    columnNames1.append("Exons")
+
+                chromeFrame1 = chromeFrame1[columnNames1]
+
+                #Add Neccesary Columns
+                chromeFrame1['Matched_Transcript'] = np.empty((len(chromeFrame1), 0)).tolist()
+                chromeFrame1['Start_Stop_Distance'] = np.empty((len(chromeFrame1), 0)).tolist()
+                chromeFrame1['Located_In'] = [[GTFLabels[i]] for _ in range(len(chromeFrame1))]
+                chromeFrame1['Shared_SJ_Transcript'] = np.empty((len(chromeFrame1), 0)).tolist()
+                chromeFrame1['Shared_SJ_Weight'] = np.empty((len(chromeFrame1), 0)).tolist()
+                chromeFrame1['Previously_Matched'] = False
+                chromeFrame1['Found'] = False
+                chromeFrame1['Shared_Located_In'] = np.empty((len(chromeFrame1), 0)).tolist()
+
+                #Sort values based on their start position
+                chromeFrame1 = chromeFrame1.sort_values(by=['start'])
+
+                #create new index to help itteration
+                chromeFrame1 = chromeFrame1.reset_index()
+                chromeFrame1 = chromeFrame1.drop(columns=['index'])
+                
+                ##Ensure all exons are sorted
+                for index, row in chromeFrame1.iterrows():
+                    Exons1 = chromeFrame1.at[index,"Exons"]
+                    chromeFrame1.at[index,"Exons"] = sorted(Exons1)
+
+                #Add Splice Junction Column
+                chromeFrame1 = splicJuncColumn(chromeFrame1)
+
+                #Add to our working frame
+                if i == 0:
+                    workingDataframe = chromeFrame1.copy()
                 else:
-                    chromeFrame1.at[index, "gene_id"] = chromeFrame1.at[index, "transcript_id"] + "/" + GTFLabels[i] + "-" + str(item) + str(index)
-            
-            columnNames1.append("Exons")
-            
-            chromeFrame1 = chromeFrame1[columnNames1]
+                    workingDataframe = workingDataframe.append(chromeFrame1)
+                i = i + 1
 
-            #Add Neccesary Columns
-            chromeFrame1['Matched_Transcript'] = np.empty((len(chromeFrame1), 0)).tolist()
-            chromeFrame1['Start_Stop_Distance'] = np.empty((len(chromeFrame1), 0)).tolist()
-            chromeFrame1['Located_In'] = [[GTFLabels[i]] for _ in range(len(chromeFrame1))]
-            chromeFrame1['found'] = False
-            chromeFrame1['Shared_SJ_Transcript'] = np.empty((len(chromeFrame1), 0)).tolist()
-            chromeFrame1['Shared_SJ_Weight'] = np.empty((len(chromeFrame1), 0)).tolist()
-            chromeFrame1['Previously_Matched'] = False
-            chromeFrame1['Shared_Located_In'] = np.empty((len(chromeFrame1), 0)).tolist()
+            #Sort values based on their start position in our working frame
+            workingDataframe = workingDataframe.sort_values(by=['start'])
 
-            #Sort values based on their start position
-            chromeFrame1 = chromeFrame1.sort_values(by=['start'])
+            #create new index to help itteration in our working frame
+            workingDataframe = workingDataframe.reset_index()
+            workingDataframe = workingDataframe.drop(columns=['index'])
+
+            for index, row in workingDataframe.iterrows():
+
+                ##subset only transcripts within range of our alignment
+                workLoopFrame = workingDataframe[workingDataframe['start'].between(workingDataframe.at[index,"start"]-distanceThreshold, workingDataframe.at[index,"start"]+distanceThreshold, inclusive=True)]
+                workLoopFrame = workLoopFrame[workLoopFrame['end'].between(workingDataframe.at[index,"end"]-distanceThreshold, workingDataframe.at[index,"end"]+distanceThreshold, inclusive=True)]
+
+                #reset index to allow itterating through it
+                workLoopFrame = workLoopFrame.reset_index()
+                workLoopFrame = workLoopFrame.drop(columns=['index'])
+
+
+                ##If our transcript is a multi-exon alignment match it to only other multi-exon alignments
+                if (len(workingDataframe.at[index,"Splice_Junctions"]) != 0):
+                    workLoopFrame = workLoopFrame[(workLoopFrame.Splice_Junctions.str.len() != 0)]
+
+                    for index2, row2 in workLoopFrame.iterrows():
+                        exonMatches = exonMatching(workingDataframe.at[index,"Splice_Junctions"], workLoopFrame.at[index2,"Splice_Junctions"], threshold)
+                        if sum(exonMatches) == len(workingDataframe.at[index,"Splice_Junctions"]) and len(workingDataframe.at[index,"Splice_Junctions"]) == len(workLoopFrame.at[index2,"Splice_Junctions"]):
+                            if(workLoopFrame.at[index2,"gene_id"] != workingDataframe.at[index,"gene_id"]):
+                                workingDataframe.at[index,"Matched_Transcript"].append(workLoopFrame.at[index2,"gene_id"])
+                                workingDataframe.at[index,"Start_Stop_Distance"].append([workingDataframe.at[index,"start"] - workLoopFrame.at[index2,"start"], workingDataframe.at[index,"end"] - workLoopFrame.at[index2,"end"]])
+                                if workLoopFrame.at[index2,"Located_In"][0] not in workingDataframe.at[index,"Located_In"]:
+                                    workingDataframe.at[index,"Located_In"].append(workLoopFrame.at[index2,"Located_In"][0])
+
+                #Only match one exon length alignments with one exon length alignments
+                if len(workingDataframe.at[index,"Splice_Junctions"]) == 0:
+                    workLoopFrame = workLoopFrame[(workLoopFrame.Splice_Junctions.str.len() == 0)]
+
+                    for index2, row2 in workLoopFrame.iterrows():
+                        if(workLoopFrame.at[index2,"gene_id"] != workingDataframe.at[index,"gene_id"]):
+                            workingDataframe.at[index,"Matched_Transcript"].append(workLoopFrame.at[index2,"gene_id"])
+                            workingDataframe.at[index,"Start_Stop_Distance"].append([workingDataframe.at[index,"start"] - workLoopFrame.at[index2,"start"], workingDataframe.at[index,"end"] - workLoopFrame.at[index2,"end"]])
+                            if workLoopFrame.at[index2,"Located_In"][0] not in workingDataframe.at[index,"Located_In"]:
+                                workingDataframe.at[index,"Located_In"].append(workLoopFrame.at[index2,"Located_In"][0])
+
+
+
+            ##Create a list to take in the connections between alignments
+            my_network_data = []
+
+            ##Add every connection we found
+            for index, row in workingDataframe.iterrows():
+                for mtchT in workingDataframe.at[index, "Matched_Transcript"]:
+                    if mtchT is not None:
+                        connection = [mtchT, workingDataframe.at[index, "gene_id"]]
+                        connection.sort()
+                        my_network_data.append(connection)
+
+            ##Create a networkx object from those connnections
+            g = nx.Graph()
+            g.add_edges_from(my_network_data)
+
+            ##Create 'primary' alignments around all our findings
+            for c in nx.connected_components(g):
+                clist = list(c)
+
+                ##use the first alginment in the connected object as the source transcript
+                itemIndex = workingDataframe.index[workingDataframe["gene_id"]==clist[0]].tolist()[0]
+
+                ##loop through the other alignments and add their information
+                for alignmentNum in range(1, len(clist)):
+                    
+                    ##Find the index of the alignment matched with primary alignment
+                    foundIndex = workingDataframe.index[workingDataframe["gene_id"]==clist[alignmentNum]].tolist()[0]
+                    
+                    if(workingDataframe.at[foundIndex,"gene_id"]) != workingDataframe.at[itemIndex,"gene_id"]:
+
+                        startChange = workingDataframe.at[itemIndex,"start"] - workingDataframe.at[foundIndex,"start"]
+                        stopChange = workingDataframe.at[itemIndex,"end"] - workingDataframe.at[foundIndex,"end"]
+
+                        for strstpNum in range(len(workingDataframe.at[foundIndex,"Start_Stop_Distance"])):
+                                if (workingDataframe.at[foundIndex,"Matched_Transcript"][strstpNum]) not in workingDataframe.at[itemIndex,"Matched_Transcript"]:
+                                    workingDataframe.at[foundIndex,"Start_Stop_Distance"][strstpNum][0] = workingDataframe.at[foundIndex,"Start_Stop_Distance"][strstpNum][0] + startChange
+                                    workingDataframe.at[foundIndex,"Start_Stop_Distance"][strstpNum][1] = workingDataframe.at[foundIndex,"Start_Stop_Distance"][strstpNum][1] + stopChange
+                                    workingDataframe.at[itemIndex,"Start_Stop_Distance"].append(workingDataframe.at[foundIndex,"Start_Stop_Distance"][strstpNum])
+
+                        #Add matched transcripts to primary alignment
+                        workingDataframe.at[itemIndex,"Matched_Transcript"].extend(workingDataframe.at[foundIndex,"Matched_Transcript"])
+                        workingDataframe.at[itemIndex,"Matched_Transcript"] = list(set(workingDataframe.at[itemIndex,"Matched_Transcript"]))
+
+                        ##Add locations to primary alignment
+                        workingDataframe.at[itemIndex,"Located_In"].extend(workingDataframe.at[foundIndex,"Located_In"])
+                        workingDataframe.at[itemIndex,"Located_In"] = list(set(workingDataframe.at[itemIndex,"Located_In"]))
+
+                        #Mark non-primary alignments as found
+                        workingDataframe.at[foundIndex,"Found"] = True
             
-            #create new index to help itteration
-            chromeFrame1 = chromeFrame1.reset_index()
-            chromeFrame1 = chromeFrame1.drop(columns=['index'])
-            
-            ##Ensure all exons are sorted
-            for index, row in chromeFrame1.iterrows():
-                Exons1 = chromeFrame1.at[index,"Exons"]
-                chromeFrame1.at[index,"Exons"] = sorted(Exons1)
+            ##Keep only our 'primary' alignments
+            workingDataframe = workingDataframe[workingDataframe["Found"]==False]
+
+            #Sort values based on their start position in our working frame
+            workingDataframe = workingDataframe.sort_values(by=['start'])
+
+            #create new index to help itteration in our working frame
+            workingDataframe = workingDataframe.reset_index()
+            workingDataframe = workingDataframe.drop(columns=['index'])
+
+            for index, row in workingDataframe.iterrows():
                 
-            #Add Splice Junction Column
-            chromeFrame1 = splicJuncColumn(chromeFrame1)
-            
-            #Add to our working frame
-            if i == 0:
-                workingDataframe = chromeFrame1.copy()
-            else:
-                workingDataframe = workingDataframe.append(chromeFrame1)
-            i = i + 1
-        
-        #Sort values based on their start position in our working frame
-        workingDataframe = workingDataframe.sort_values(by=['start'])
+                #add its own name to mathced transcripts if not already in
+                if workingDataframe.at[index,"gene_id"] not in workingDataframe.at[index,"Matched_Transcript"]:
+                    workingDataframe.at[index,"Matched_Transcript"].append(workingDataframe.at[index,"gene_id"])
 
-        #create new index to help itteration in our working frame
-        workingDataframe = workingDataframe.reset_index()
-        workingDataframe = workingDataframe.drop(columns=['index'])
-        
-        for index, row in workingDataframe.iterrows():
-
-            ##If the transcript has already been perfectly matched than skip it
-            if workingDataframe.at[index, "found"] == False:
-                
                 ##If the end is greater then the start of the next index they overlap
                 if index+1 < len(workingDataframe.index) and workingDataframe.at[index, "end"] >= workingDataframe.at[index+1,"start"]:
 
-                    #Only match one exon length genes with one exon length genes
-                    if len(workingDataframe.at[index,"Splice_Junctions"]) == 0 and len(workingDataframe.at[index+1,"Splice_Junctions"]) == 0:
-                        if abs(workingDataframe.at[index,"start"] - workingDataframe.at[index+1,"start"])<=distanceThreshold and abs(workingDataframe.at[index,"end"] - workingDataframe.at[index+1,"end"])<=distanceThreshold:
-                            workingDataframe.at[index,"Matched_Transcript"].append(workingDataframe.at[index+1,"gene_id"])
-                            workingDataframe.at[index,"Start_Stop_Distance"].append([workingDataframe.at[index,"start"] - workingDataframe.at[index+1,"start"], workingDataframe.at[index,"end"] - workingDataframe.at[index+1,"end"]])
-                            workingDataframe.at[index + 1,"found"] = True
-                            if workingDataframe.at[index+1,"Located_In"][0] not in workingDataframe.at[index,"Located_In"]:
-                                workingDataframe.at[index,"Located_In"].append(workingDataframe.at[index+1,"Located_In"][0])
-                            
-
                     #Match multi-exon length genes
-                    elif len(workingDataframe.at[index,"Splice_Junctions"]) != 0:
+                    if len(workingDataframe.at[index,"Splice_Junctions"]) != 0:
                         exonMatches = exonMatching(workingDataframe.at[index,"Splice_Junctions"], workingDataframe.at[index+1,"Splice_Junctions"], threshold)
-                        if sum(exonMatches) == len(workingDataframe.at[index,"Splice_Junctions"]) and len(workingDataframe.at[index,"Splice_Junctions"]) == len(workingDataframe.at[index+1,"Splice_Junctions"]):
-                            if abs(workingDataframe.at[index,"start"] - workingDataframe.at[index+1,"start"])<=distanceThreshold and abs(workingDataframe.at[index,"end"] - workingDataframe.at[index+1,"end"])<=distanceThreshold:
-                                workingDataframe.at[index,"Matched_Transcript"].append(workingDataframe.at[index+1,"gene_id"])
-                                workingDataframe.at[index,"Start_Stop_Distance"].append([workingDataframe.at[index,"start"] - workingDataframe.at[index+1,"start"], workingDataframe.at[index,"end"] - workingDataframe.at[index+1,"end"]])
-                                workingDataframe.at[index+1,"found"] = True
-                                if workingDataframe.at[index+1,"Located_In"][0] not in workingDataframe.at[index,"Located_In"]:
-                                    workingDataframe.at[index,"Located_In"].append(workingDataframe.at[index+1,"Located_In"][0])
-                
+                        if sum(exonMatches) >= 1:
+                            workingDataframe.at[index, 'Shared_SJ_Transcript'].append(workingDataframe.at[index+1,"gene_id"]) 
+                            workingDataframe.at[index, 'Shared_SJ_Weight'].append([exonMatches, len(workingDataframe.at[index+1,"Splice_Junctions"])])
+                            workingDataframe.at[index+1, 'Shared_SJ_Transcript'].append(workingDataframe.at[index,"gene_id"]) 
+                            workingDataframe.at[index+1, 'Shared_SJ_Weight'].append([exonMatches, len(workingDataframe.at[index,"Splice_Junctions"])])
+                            if workingDataframe.at[index+1,"Located_In"][0] not in workingDataframe.at[index,"Shared_Located_In"]:
+                                workingDataframe.at[index,"Shared_Located_In"].append(workingDataframe.at[index+1,"Located_In"][0])
+                            if workingDataframe.at[index,"Located_In"][0] not in workingDataframe.at[index+1,"Shared_Located_In"]:
+                                workingDataframe.at[index+1,"Shared_Located_In"].append(workingDataframe.at[index,"Located_In"][0])
+
                     looping = 2
                     while index+looping < len(workingDataframe.index) and workingDataframe.at[index, "end"] >= workingDataframe.at[index+looping,"start"]:
 
-                        #Only match one exon length genes with one exon length genes
-                        if len(workingDataframe.at[index,"Splice_Junctions"]) == 0 and len(workingDataframe.at[index+looping,"Splice_Junctions"]) == 0:
-                            if abs(workingDataframe.at[index,"start"] - workingDataframe.at[index+looping,"start"])<=distanceThreshold and abs(workingDataframe.at[index,"end"] - workingDataframe.at[index+looping,"end"])<=distanceThreshold:
-                                workingDataframe.at[index,"Matched_Transcript"].append(workingDataframe.at[index+looping,"gene_id"])
-                                workingDataframe.at[index,"Start_Stop_Distance"].append([workingDataframe.at[index,"start"] - workingDataframe.at[index+looping,"start"], workingDataframe.at[index,"end"] - workingDataframe.at[index+looping,"end"]])
-                                workingDataframe.at[index+looping,"found"] = True
-                                if workingDataframe.at[index+looping,"Located_In"][0] not in workingDataframe.at[index,"Located_In"]:
-                                    workingDataframe.at[index,"Located_In"].append(workingDataframe.at[index+looping,"Located_In"][0])
-
                         #Match multi-exon length genes
-                        elif len(workingDataframe.at[index,"Splice_Junctions"]) != 0:
+                        if len(workingDataframe.at[index,"Splice_Junctions"]) != 0:
                             exonMatches = exonMatching(workingDataframe.at[index,"Splice_Junctions"], workingDataframe.at[index+looping,"Splice_Junctions"], threshold)
-                            if sum(exonMatches) == len(workingDataframe.at[index,"Splice_Junctions"]) and len(workingDataframe.at[index,"Splice_Junctions"]) == len(workingDataframe.at[index+looping,"Splice_Junctions"]):
-                                if abs(workingDataframe.at[index,"start"] - workingDataframe.at[index+looping,"start"])<=distanceThreshold and abs(workingDataframe.at[index,"end"] - workingDataframe.at[index+looping,"end"])<=distanceThreshold:
-                                    workingDataframe.at[index,"Matched_Transcript"].append(workingDataframe.at[index+looping,"gene_id"])
-                                    workingDataframe.at[index,"Start_Stop_Distance"].append([workingDataframe.at[index,"start"] - workingDataframe.at[index+looping,"start"], workingDataframe.at[index,"end"] - workingDataframe.at[index+looping,"end"]])
-                                    workingDataframe.at[index+looping,"found"] = True
-                                    if workingDataframe.at[index+looping,"Located_In"][0] not in workingDataframe.at[index,"Located_In"]:
-                                        workingDataframe.at[index,"Located_In"].append(workingDataframe.at[index+looping,"Located_In"][0])
-                        
+                            if sum(exonMatches) >= 1:
+                                workingDataframe.at[index, 'Shared_SJ_Transcript'].append(workingDataframe.at[index+looping,"gene_id"]) 
+                                workingDataframe.at[index, 'Shared_SJ_Weight'].append([exonMatches, len(workingDataframe.at[index+looping,"Splice_Junctions"])])
+                                workingDataframe.at[index+looping, 'Shared_SJ_Transcript'].append(workingDataframe.at[index,"gene_id"]) 
+                                workingDataframe.at[index+looping, 'Shared_SJ_Weight'].append([exonMatches, len(workingDataframe.at[index,"Splice_Junctions"])])
+                                if workingDataframe.at[index+looping,"Located_In"][0] not in workingDataframe.at[index,"Shared_Located_In"]:
+                                    workingDataframe.at[index,"Shared_Located_In"].append(workingDataframe.at[index+looping,"Located_In"][0])
+                                if workingDataframe.at[index,"Located_In"][0] not in workingDataframe.at[index+looping,"Shared_Located_In"]:
+                                    workingDataframe.at[index+looping,"Shared_Located_In"].append(workingDataframe.at[index,"Located_In"][0])
+
                         ##Itterate
                         looping = looping + 1
-                        
-        workingDataframe = workingDataframe[workingDataframe["found"]==False]
-        
-        #Sort values based on their start position in our working frame
-        workingDataframe = workingDataframe.sort_values(by=['start'])
-        
-        #create new index to help itteration in our working frame
-        workingDataframe = workingDataframe.reset_index()
-        workingDataframe = workingDataframe.drop(columns=['index'])
-        
-        for index, row in workingDataframe.iterrows():
-            
-            ##If the end is greater then the start of the next index they overlap
-            if index+1 < len(workingDataframe.index) and workingDataframe.at[index, "end"] >= workingDataframe.at[index+1,"start"]:
 
-                #Match multi-exon length genes
-                if len(workingDataframe.at[index,"Splice_Junctions"]) != 0:
-                    exonMatches = exonMatching(workingDataframe.at[index,"Splice_Junctions"], workingDataframe.at[index+1,"Splice_Junctions"], threshold)
-                    if sum(exonMatches) >= 1:
-                        workingDataframe.at[index, 'Shared_SJ_Transcript'].append(workingDataframe.at[index+1,"gene_id"]) 
-                        workingDataframe.at[index, 'Shared_SJ_Weight'].append([exonMatches, len(workingDataframe.at[index+1,"Splice_Junctions"])])
-                        workingDataframe.at[index+1, 'Shared_SJ_Transcript'].append(workingDataframe.at[index,"gene_id"]) 
-                        workingDataframe.at[index+1, 'Shared_SJ_Weight'].append([exonMatches, len(workingDataframe.at[index,"Splice_Junctions"])])
-                        if workingDataframe.at[index+1,"Located_In"][0] not in workingDataframe.at[index,"Shared_Located_In"]:
-                            workingDataframe.at[index,"Shared_Located_In"].append(workingDataframe.at[index+1,"Located_In"][0])
-                        if workingDataframe.at[index,"Located_In"][0] not in workingDataframe.at[index+1,"Shared_Located_In"]:
-                            workingDataframe.at[index+1,"Shared_Located_In"].append(workingDataframe.at[index,"Located_In"][0])
+            MasterFrameGeneMatch = MasterFrameGeneMatch.append(workingDataframe)
 
-                looping = 2
-                while index+looping < len(workingDataframe.index) and workingDataframe.at[index, "end"] >= workingDataframe.at[index+looping,"start"]:
-
-                    #Match multi-exon length genes
-                    if len(workingDataframe.at[index,"Splice_Junctions"]) != 0:
-                        exonMatches = exonMatching(workingDataframe.at[index,"Splice_Junctions"], workingDataframe.at[index+looping,"Splice_Junctions"], threshold)
-                        if sum(exonMatches) >= 1:
-                            workingDataframe.at[index, 'Shared_SJ_Transcript'].append(workingDataframe.at[index+looping,"gene_id"]) 
-                            workingDataframe.at[index, 'Shared_SJ_Weight'].append([exonMatches, len(workingDataframe.at[index+looping,"Splice_Junctions"])])
-                            workingDataframe.at[index+looping, 'Shared_SJ_Transcript'].append(workingDataframe.at[index,"gene_id"]) 
-                            workingDataframe.at[index+looping, 'Shared_SJ_Weight'].append([exonMatches, len(workingDataframe.at[index,"Splice_Junctions"])])
-                            if workingDataframe.at[index+looping,"Located_In"][0] not in workingDataframe.at[index,"Shared_Located_In"]:
-                                workingDataframe.at[index,"Shared_Located_In"].append(workingDataframe.at[index+looping,"Located_In"][0])
-                            if workingDataframe.at[index,"Located_In"][0] not in workingDataframe.at[index+looping,"Shared_Located_In"]:
-                                workingDataframe.at[index+looping,"Shared_Located_In"].append(workingDataframe.at[index,"Located_In"][0])
-
-                    ##Itterate
-                    looping = looping + 1
-        
-        MasterFrameGeneMatch = MasterFrameGeneMatch.append(workingDataframe)
-        
-        print(item, end=" ")
+            print(item, end=" ")
+            print(strand, end = " ")
         
     #create new index to help itteration in our working frame
     MasterFrameGeneMatch = MasterFrameGeneMatch.reset_index()
     MasterFrameGeneMatch = MasterFrameGeneMatch.drop(columns=['index'])
     
     return(MasterFrameGeneMatch)
-
-
-
-##gtfTranscript Reference Matcher -- Match a collapsed gtf, or a merged gtf with a reference gtf
-
-##gtfStart -- the gtf dataframe you want to compare to the reference
-
-##gtfReference -- the gtf dataframe of your reference
-
-##referenceLabel -- the name you want to use with your reference
-
-##threshold --- threshold you consider acceptable for distance between splice junction start and stops to be counted as a match
-
-##distanceThreshold --- threshold you consider acceptable between start and stop sites to be counted as a match
-
-
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold, distanceThreshold):
     
     ###Create an array of each GTFs chromosones
@@ -892,27 +1094,45 @@ def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold,
     #Check if chromosones don't match
     if sorted(chromosones1) != sorted(chromosones2):
         print("Non-matching chromosones")
+        
+    strands = ["+", "-"]
 
     print("\n")
     print("Comparing to Reference:")
 
     for item in chromosones1:
+        
+        for strand in strands:
 
             #Subset our dataframe by the chromosone
             chromeFrame1 = gtfStart[gtfStart["seqname"] == item]
             chromeFrame2 = gtfReference[gtfReference["seqname"] == item]
+            
+            ##subset our dataframes by strand
+            chromeFrame1 = chromeFrame1[chromeFrame1["strand"]==strand]
+            if strand == "+":
+                antiSense = chromeFrame2[chromeFrame2["strand"]=="-"]
+            else:
+                antiSense = chromeFrame2[chromeFrame2["strand"]=="+"]
+            chromeFrame2 = chromeFrame2[chromeFrame2["strand"]==strand]
+
 
             #create new index to help itteration
             chromeFrame1 = chromeFrame1.reset_index()
             chromeFrame1 = chromeFrame1.drop(columns=['index'])
 
             chromeFrame2 = chromeFrame2.reset_index()
-            chromeFrame2 = chromeFrame2.drop(columns=['index'])     
+            chromeFrame2 = chromeFrame2.drop(columns=['index'])
+            
+            antiSense = antiSense.reset_index()
+            antiSense = antiSense.drop(columns=['index']) 
                 
             chromeFrame2 = collapsedReturns(chromeFrame2)
+    
 
             #Look at only transcripts from reference GTF
-            chromeFrame2 = chromeFrame2[chromeFrame2["feature"] == "transcript"] 
+            chromeFrame2 = chromeFrame2[chromeFrame2["feature"] == "transcript"]
+            antiSense = antiSense[antiSense["feature"] == "transcript"]
 
             chromeFrame1['Matched_Reference_Gene'] = [[] for _ in range(len(chromeFrame1))]
             chromeFrame1['Matched_Reference_Transcript'] = [[] for _ in range(len(chromeFrame1))]
@@ -921,14 +1141,18 @@ def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold,
             chromeFrame1['Matched_Ref_Start_Stop'] = [[] for _ in range(len(chromeFrame1))]
             chromeFrame1['Shared_Ref_Weight'] = np.empty((len(chromeFrame1), 0)).tolist()
             chromeFrame1['Overlap_Ref_Transcript'] = np.empty((len(chromeFrame1), 0)).tolist()
+            chromeFrame1['Antisense_Reference'] = [[] for _ in range(len(chromeFrame1))]
             
             if 'transcript_id' in chromeFrame2.columns:
                 if 'transcript_name' not in chromeFrame2.columns:
                     chromeFrame2 = chromeFrame2.rename(columns={"transcript_id": "transcript_name"})
+                    antiSense = antiSense.rename(columns={"transcript_id": "transcript_name"})
+
 
             #Sort values based on their start position
             chromeFrame1 = chromeFrame1.sort_values(by=['start'])
             chromeFrame2 = chromeFrame2.sort_values(by=['start'])
+            antiSense = antiSense.sort_values(by=['start'])
             
             #create new index to help itteration
             chromeFrame1 = chromeFrame1.reset_index()
@@ -937,10 +1161,20 @@ def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold,
             chromeFrame2 = chromeFrame2.reset_index()
             chromeFrame2 = chromeFrame2.drop(columns=['index'])
             
+            antiSense = antiSense.reset_index()
+            antiSense = antiSense.drop(columns=['index'])
+            
+            ##Sort all of the exons in reference
             for index, row in chromeFrame2.iterrows():
                 Exons2 = chromeFrame2.at[index,"Exons"]
-                chromeFrame2.at[index,"Exons"] = sorted(Exons2)
+                chromeFrame2.at[index,"Exons"] = sorted(Exons2) 
                 
+            if 'transcript_id' in chromeFrame2.columns:
+                if 'transcript_name' in chromeFrame2.columns:
+                    for index, row in chromeFrame2.iterrows():
+                        if chromeFrame2.at[index,"transcript_name"] == "":
+                            chromeFrame2.at[index,"transcript_name"] = chromeFrame2.at[index,"transcript_id"]
+            
             chromeFrame2 = chromeFrame2.reset_index()
             chromeFrame2 = chromeFrame2.drop(columns=['index'])
 
@@ -949,12 +1183,19 @@ def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold,
 
             itterator = 0
             for index, row in chromeFrame1.iterrows():
+                
+                ##store all antisense transcripts
+                antiSenseLoop = antiSense[antiSense["start"]<chromeFrame1.at[index, 'end']]
+                antiSenseLoop = antiSenseLoop[antiSenseLoop["end"]>chromeFrame1.at[index, 'start']]
+                
+                chromeFrame1.at[index, 'Antisense_Reference'] = list(antiSenseLoop.transcript_name)
 
                 #Move Along Rows in the Reference Until It Is Past Beginning of Current read
-                while itterator < len(chromeFrame2.index)-1 and chromeFrame1.at[index, 'start'] > chromeFrame2.at[itterator,"end"]:
+                while (itterator < len(chromeFrame2.index)-1) and (chromeFrame1.at[index, 'start'] > chromeFrame2.at[itterator,"end"]):
                     itterator = itterator + 1
                     
-                if (chromeFrame2.at[itterator,"start"] <= chromeFrame1.at[index, 'start'] <= chromeFrame2.at[itterator,"end"]) or (chromeFrame2.at[itterator,"start"] <= chromeFrame1.at[index, 'end'] <= chromeFrame2.at[itterator,"end"]) or (chromeFrame1.at[index,"start"] <= chromeFrame2.at[itterator, 'end'] <= chromeFrame1.at[index,"end"]):
+                if (itterator < len(chromeFrame2.index)-1) and (chromeFrame1.at[index, 'start'] <= chromeFrame2.at[itterator,"end"]) and (chromeFrame2.at[itterator,"start"] <= chromeFrame1.at[index, 'end']):
+                    
                     
                     #Only match one exon length genes with one exon length genes
                     if len(chromeFrame1.at[index,"Splice_Junctions"]) == 0:
@@ -1017,32 +1258,21 @@ def gtfTranscriptomeReference(gtfStart, gtfReference, referenceLabel, threshold,
                         looping = looping + 1
 
             MasterFrameGeneMatch = MasterFrameGeneMatch.append(chromeFrame1) #add our matched data to the master dataframe
-            print(item,end = ' ') #Display each chromosone as we finish it
+            print(item, end = ' ') #Display each chromosone as we finish it
+            print(strand, end = " ")
     
     MasterFrameGeneMatch = MasterFrameGeneMatch.reset_index()
     MasterFrameGeneMatch = MasterFrameGeneMatch.drop(columns=['index'])
     
     return(MasterFrameGeneMatch)
-
-
-##gtf Symbiosis: Master function which both does the Symbiosis and also displays the results
-
-##analyzedGTFs --- an array of gtfs which you wish to be combined
-
-##analyzedGTFLabels --- an array of the associated name you wish to label each GTF
-
-##threshold --- threshold you consider acceptable for distance between splice junction start and stops to be counted as a match
-
-##distanceThreshold --- threshold you consider acceptable between start and stop sites to be counted as a match
-
-##gtfReference -- the gtf dataframe of your reference
-
-##referenceLabel -- the name you want to use with your reference
-
-##refdistanceThreshold --- threshold you consider acceptable between start and stop sites to be counted as a match for your reference
-
-
-def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, referenceGTF = "", referenceGTFLabel = "", refdistanceThreshold = 0, threshold = 0, distanceThreshold = 100):
+    
+    
+    
+    
+    
+    
+    
+def gftSymbiosis(analyzedGTFs, analyzedGTFLabels, threshold, distanceThreshold, referenceGTF = "", referenceGTFLabel = "", refdistanceThreshold = 0, collapse = True):
     
     #Print Out Basic Data of Both GTFs
     t = PrettyTable(['Name', 'Transcripts', 'Exons', 'Genes']) 
@@ -1064,7 +1294,7 @@ def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, referenceGTF = "", referenceGT
         
     #Run the master comparison Fucntion
     
-    exonMatchedGTF = transcriptomeMasterFunction2(analyzedGTFs, analyzedGTFLabels, threshold, distanceThreshold)
+    exonMatchedGTF = transcriptomeMasterFunction2(analyzedGTFs, analyzedGTFLabels, threshold, distanceThreshold, collapse)
     print("\n")
     t = PrettyTable(['Name', 'Size']) 
     t.add_row(['Final Condensed Size', len(exonMatchedGTF.index)])
@@ -1330,7 +1560,7 @@ def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, referenceGTF = "", referenceGT
     elif referenceGTF == "":
         
         #Find the Number of Perfect Matches
-        perfectGTF = exonMatchedGTF[exonMatchedGTF.astype(str)['Matched_Transcript'] != '[]']
+        perfectGTF = exonMatchedGTF[(exonMatchedGTF.Matched_Transcript.str.len() > 1)]
         noSingleExonPerfectGTF = perfectGTF[perfectGTF.astype(str)['Splice_Junctions'] != '[]']
         perfectNum = len(perfectGTF.index)
         noSingleExonPerfectNum = len(noSingleExonPerfectGTF.index)
@@ -1342,7 +1572,7 @@ def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, referenceGTF = "", referenceGT
         print(t)
         
         #Find all non-perfect matches & no matches
-        noPerfectGTF = exonMatchedGTF[exonMatchedGTF.astype(str)['Matched_Transcript'] == '[]']
+        noPerfectGTF = exonMatchedGTF[(exonMatchedGTF.Matched_Transcript.str.len() <= 1)]
         noPerfectNum = len(noPerfectGTF.index)
         
         #Find no-matches
@@ -1565,27 +1795,30 @@ def gtfSymbiosis(analyzedGTFs, analyzedGTFLabels, referenceGTF = "", referenceGT
         
 
         return(exonMatchedGTF)
-    
-    
-##Gtf Transcriptome 2: Master fucntion which both assembles the Transcriptome and displays the results
+        
+        
+        
+        
+        
+    ###gtfTranscriptome is a shell function that contains Transcriptome Master Function and an optional ability to run Transcriptome Reference Matching if a reference annotation is given.
 
-##analyzedGTFs --- list of GTFs you wish combine into a transcriptome
+    ###It begins by running the Transcriptome Master Function. After generating these partial and perfect match determinations, and removing duplicates of those perfect matches, gene and transcript names are assigned before returning an assembled transcriptome. At which point, if a reference is given it will run Transcriptome Reference Matching to match this iso-seq transcriptome with the reference. If the “oneExonSeperate” flag is set to true, then the final result will be split into multi and single exon for analysis, if the flag is set to false, than the result will be analyzed as a whole. The analysis portion will display the number of each type of transcript match with the reference, as well as a gene level display of match type. If the “vennRefernce” is set to true, then the overlap venn diagram for genes and transcripts will also display the reference annotation as a possible location, if it is set to false, than only locations from the iso-seq datasets will be displayed. The upset plot displayed after the venn diagram will also be affected by this flag in the same manner.
 
-##analyzedLabels --- list of names you wish to associate with each gtf
+    ###An example run of the gtfTranscriptome2:
 
-##exonMatchThreshold --- distance which you wish to count as a matching splice junction
+    ###assemblyTranscriptome = gftTranscriptome2(analyzedGTFs = [BNLxBrain, F344Brain, LEBrain, SHRBrain, SHRLiver, BNLxLiver], analyzedLabels = ["BNLxBrain", "F344Brain", "LEBrain", "SHRBrain","SHRLiver", "BNLxLiver"],  exonMatchThreshold = 0, distanceThreshold = 100, gtfReference = RattusRnor, referenceLabel = "RattusRnor", oneExonSeperate = False, vennReference = False)
 
-##distanceThreshold --- distance which you wish to count as a matching transcript
+    ###Where analyzedGTFs is an array of pandas dataframe containing our gtf datasets, analyzedLabels is an array of strings that correspond to the names we wish to refere to each dataset with, exonMatchThreshold is the splice junction threshold, distanceThreshold is the start, stop threshold, gtfReference is a pandas dataframe corresponding to our reference annotation dataset, referenceLabel is the name we wish to associate with our reference annotation, oneExonSeperate is a binary flag responsible for whether or not to separate the analysis of the single and multi-exon transcripts, and vennReference is a binary flag responsible for whether or not to include the reference annotation as a location in the final venn diagrams and upset plots for location.
+ 
+        
+        
+     
+        
+        
+        
+        
+def gftTranscriptome2(analyzedGTFs,analyzedLabels, exonMatchThreshold, distanceThreshold, gtfReference = "", referenceLabel ="", oneExonSeperate = False, vennReference = True, collapse = True):
 
-##gtfReference --- a gtf dataframe of a reference like Ensembl which your final transcirptome can be compared against
-
-##referenceLabel --- the name you wish to associate with your reference
-
-##oneExonSeperate --- a bianry flag that determines whether you want the final analysis seperated by multi-exon and one-exon (default value is False, which corresponds to not splitting the final analysis)
-
-    
-def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceLabel ="", oneExonSeperate = False, vennReference = True, exonMatchThreshold = 0, distanceThreshold = 100):
-    
     print("Combining:")
     
     #Get the total size of all our GTFs combined
@@ -1601,7 +1834,7 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
     print("\n")
     
     #Combine gtfs
-    exonMatchedGTF = transcriptomeMasterFunction2(analyzedGTFs, analyzedLabels, exonMatchThreshold, distanceThreshold)
+    exonMatchedGTF = transcriptomeMasterFunction2(analyzedGTFs, analyzedLabels, exonMatchThreshold, distanceThreshold, collapse)
     
     #Print a table of the starting and final sizes
     t = PrettyTable(['Name', 'Amount'])
@@ -1628,12 +1861,13 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
     numbersInterval = [round(sizeDF/4), round(2*sizeDF/4), round(3*sizeDF/4), sizeDF-1]
     terms = ["25%", "50%", "75%", "100%"] 
     
+    exonMatchedGTF.sort_values(['seqname', 'start'])
+    
     exonMatchedGTF = exonMatchedGTF.reset_index()
     exonMatchedGTF = exonMatchedGTF.drop(columns=['index'])
     
     #Add Each connection from our data
     for index, row in exonMatchedGTF.iterrows():
-        
         for item in exonMatchedGTF.at[index, "Shared_SJ_Transcript"]:
             if item is not None:
                 connection = [item, exonMatchedGTF.at[index, "gene_id"]]
@@ -1662,11 +1896,13 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
     numbersInterval = [round(sizeDF/4), round(2*sizeDF/4), round(3*sizeDF/4), sizeDF-1]
     terms = ["25%", "50%", "75%", "100%"]
     
+    
     #Add gene names and transcript names
     k = 0
     print("Creating Genes:")
     for c in nx.connected_components(g):
         clist = list(c)
+        clist = sorted(clist)
         kstr = str(k)
         zero_filled_k = kstr.zfill(fulllength)
         p = 1
@@ -1690,15 +1926,33 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
             exonMatchedGTF2.at[index, "new_transcript_id"] = "COISORAT." + zero_filled_k + "." + str(1)
             k=k+1 
             exonMatchedGTF2.at[index, "solitaryGene"] = True
+            
         #Add start and stops if it makes the size larger
-        for item in exonMatchedGTF2.at[index, "Start_Stop_Distance"]:
-            if not item:
+        biggestStart = 0
+        biggestEnd = 0
+        exonMatchedGTF2.at[index, "Start_Stop_Distance"].append([0,0])
+        
+        for itemNum in range(len(exonMatchedGTF2.at[index, "Start_Stop_Distance"])):
+            if not exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum]:
                 print(exonMatchedGTF2.iloc[index])
-            if exonMatchedGTF2.at[index, "start"] + item[0] < exonMatchedGTF2.at[index, "start"]:
-                exonMatchedGTF2.at[index, "start"] = exonMatchedGTF2.at[index, "start"] + item[0]
-            if exonMatchedGTF2.at[index, "end"] + item[1] < exonMatchedGTF2.at[index, "end"]:
-                exonMatchedGTF2.at[index, "end"] = exonMatchedGTF2.at[index, "end"] - item[1]
-        exonMatchedGTF2.at[index, "Matched_Transcript"].append(exonMatchedGTF2.at[index, "transcript_id"])
+            if exonMatchedGTF2.at[index, "start"] - exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][0] < exonMatchedGTF2.at[index, "start"]:
+                if exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][0] > biggestStart:
+                    biggestStart =  exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][0]
+            if exonMatchedGTF2.at[index, "end"] - exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][1] > exonMatchedGTF2.at[index, "end"]:
+                if abs(exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][1]) > abs(biggestEnd):
+                    biggestEnd =  exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][1]
+        
+        exonMatchedGTF2.at[index, "start"] = exonMatchedGTF2.at[index, "start"] - biggestStart
+        exonMatchedGTF2.at[index, "end"] = exonMatchedGTF2.at[index, "end"] - biggestEnd
+        
+        for itemNum in range(len(exonMatchedGTF2.at[index, "Start_Stop_Distance"])):
+            if not exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum]:
+                print(exonMatchedGTF2.iloc[index])
+            else:
+                exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][0] = exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][0] - biggestStart
+                exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][1] = exonMatchedGTF2.at[index, "Start_Stop_Distance"][itemNum][1] - biggestEnd
+                
+        
        
     print("\n")
     if oneExonSeperate == True:
@@ -1723,7 +1977,7 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
         print("Number of Genes: " + str(k))
 
     #Clean Up Columns and column names
-    exonMatchedGTF2 = exonMatchedGTF2.drop(columns=['found'])
+    exonMatchedGTF2 = exonMatchedGTF2.drop(columns=['Found'])
     exonMatchedGTF2 = exonMatchedGTF2.drop(columns=['transcript_id'])
     exonMatchedGTF2 = exonMatchedGTF2.drop(columns=['gene_id'])
     exonMatchedGTF2 = exonMatchedGTF2.drop(columns=['Previously_Matched'])
@@ -1759,54 +2013,23 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
         doubleMatch = doubleMatch[doubleMatch.astype(str)['Matched_Reference_Gene'] != '[]']
         doubleMatchSize = len(doubleMatch.index)
         
-        ##Find Gene Coverage
-        genesCoveredGN = []
-        genesCoveredSG = []
-        for index, row in exonMatchedGTF3.iterrows():
-            if exonMatchedGTF3.at[index, "Matched_Reference_Gene"]:
-                if exonMatchedGTF3.at[index, "solitaryGene"] == True:
-                    genesCoveredSG.append(exonMatchedGTF3.at[index, "gene_id"])
-                elif exonMatchedGTF3.at[index, "solitaryGene"] == False:
-                    genesCoveredGN.append(exonMatchedGTF3.at[index, "gene_id"])
-        
-        #Get the gene count lengths
-        genesCoveredSGFinal = list(set(genesCoveredSG))
-        genesCoveredSGNum = len(genesCoveredSGFinal)
-        
-        genesCoveredGNFinal = list(set(genesCoveredGN))
-        genesCoveredGNNum = len(genesCoveredGNFinal)
-        
-        #Get all solitary genes and gene networks
-        genesCoveredGN2 = []
-        genesCoveredSG2 = []
-        for index, row in exonMatchedGTF3.iterrows():
-            if exonMatchedGTF3.at[index, "Reference_Transcript_Partial"]:
-                if exonMatchedGTF3.at[index, "solitaryGene"] == True:
-                    genesCoveredSG2.append(exonMatchedGTF3.at[index, "gene_id"])
-                elif exonMatchedGTF3.at[index, "solitaryGene"] == False:
-                    genesCoveredGN2.append(exonMatchedGTF3.at[index, "gene_id"])
-        
-        #Find partial matches that don't have perfect matches
-        genesCoveredGN3 = [x for x in genesCoveredGN2 if x not in genesCoveredGN]
-        genesCoveredSG3 = [x for x in genesCoveredSG2 if x not in genesCoveredSG]
-        
-        #Get the gene count lengths
-        genesCoveredSGFinal2 = list(set(genesCoveredSG3))
-        genesCoveredSGNumBoth = len(genesCoveredSGFinal2)
-        
-        genesCoveredGNFinal2 = list(set(genesCoveredGN3))
-        genesCoveredGNNumBoth = len(genesCoveredGNFinal2)
-        
         #Get amount of gtf that overlapepd a known transcript but did not match anyhting
         transcriptomeOverlap = exonMatchedGTF3[exonMatchedGTF3['Overlap_Ref_Transcript'].map(len) > 0]
         transcriptomeOverlap = transcriptomeOverlap[transcriptomeOverlap['Reference_Transcript_Partial'].map(len) == 0]
         transcriptomeOverlap = transcriptomeOverlap[transcriptomeOverlap['Matched_Reference_Transcript'].map(len) == 0]
         transcriptomeOverlapNum = len(transcriptomeOverlap.index)
         
+        ##Get amount of antisense matches
+        transcriptomeAntisense = exonMatchedGTF3[exonMatchedGTF3['Antisense_Reference'].map(len) > 0]
+        transcriptomeAntisense = transcriptomeAntisense[transcriptomeAntisense['Reference_Transcript_Partial'].map(len) == 0]
+        transcriptomeAntisense = transcriptomeAntisense[transcriptomeAntisense['Overlap_Ref_Transcript'].map(len) == 0]
+        transcriptomeAntisense = transcriptomeAntisense[transcriptomeAntisense['Matched_Reference_Transcript'].map(len) == 0]
+        transcriptomeAntiNum = len(transcriptomeAntisense.index)
+        
         #Define numbers for perfect matches, partial matches and no matches
         matchedPerf = fullRefSize-nonReferenceSize
         matchedPart = fullRefSize-nonReferencePartSize-doubleMatchSize
-        noMatch = fullRefSize - matchedPerf - matchedPart - transcriptomeOverlapNum
+        noMatch = fullRefSize - matchedPerf - matchedPart - transcriptomeOverlapNum - transcriptomeAntiNum
         
         #Print a table of the  respective transcript sizes
         t = PrettyTable(['Name', 'Amount', 'Percent'])
@@ -1814,63 +2037,141 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
         t.add_row(['Matched To Reference (Perfect)', matchedPerf, round(((matchedPerf)/fullRefSize)*100, 3)])
         t.add_row(['Matched To Reference (Partial (No Perfect))', matchedPart, round(((matchedPart)/fullRefSize)*100, 3)])
         t.add_row(['Overlap With Known Transcript, No SJ Match (Full or Partial)', transcriptomeOverlapNum, round(((transcriptomeOverlapNum)/fullRefSize)*100, 3)])
+        t.add_row(['Antisense With Known Transcript, No SJ Match & No Same Strand Overlap', transcriptomeAntiNum, round(((transcriptomeAntiNum)/fullRefSize)*100, 3)])
         t.add_row(['No Match (Perfect or Partial) & No Overlap', noMatch, round(((noMatch)/fullRefSize)*100, 3)])
         print("\n")
         print(t)
         
-        ##Get the size of overlapping solitary genes and of non matching solitary genes
-        solitaryGTF = exonMatchedGTF3[exonMatchedGTF3["solitaryGene"] == True]
-        solitaryGTFNM = solitaryGTF[solitaryGTF.astype(str)['Matched_Reference_Gene'] == '[]']
-        solitaryGTFNM = solitaryGTFNM[solitaryGTFNM.astype(str)['Reference_Transcript_Partial'] == '[]']
-        solitaryGTFOverlap = solitaryGTFNM[solitaryGTFNM.astype(str)['Overlap_Ref_Transcript'] != '[]']
-        solitaryGTFOverlapNUM = solitaryGTFOverlap.shape[0]
+        ##Find Gene Coverage
         
-        solitaryGTFNM = solitaryGTFNM[solitaryGTFNM.astype(str)['Overlap_Ref_Transcript'] == '[]']
-        solitaryGTFNMNum = solitaryGTFNM.shape[0]
+        ##perfect matched genes
+        genesCoveredGN = []
+        genesCoveredSG = []
+        
+        ##partial matched genes
+        genesCoveredGN2 = []
+        genesCoveredSG2 = []
+        
+        ##overlapping genes
+        genesCoveredGN3 = []
+        genesCoveredSG3 = []
+        
+        ##antisense genes
+        genesCoveredGN4 = []
+        genesCoveredSG4 = []
+        
+        for index, row in exonMatchedGTF3.iterrows():
+            if exonMatchedGTF3.at[index, "Matched_Reference_Gene"]:
+                if exonMatchedGTF3.at[index, "solitaryGene"] == True:
+                    genesCoveredSG.append(exonMatchedGTF3.at[index, "gene_id"])
+                elif exonMatchedGTF3.at[index, "solitaryGene"] == False:
+                    genesCoveredGN.append(exonMatchedGTF3.at[index, "gene_id"])
+            elif exonMatchedGTF3.at[index, "Reference_Transcript_Partial"]:
+                if exonMatchedGTF3.at[index, "solitaryGene"] == True:
+                    genesCoveredSG2.append(exonMatchedGTF3.at[index, "gene_id"])
+                elif exonMatchedGTF3.at[index, "solitaryGene"] == False:
+                    genesCoveredGN2.append(exonMatchedGTF3.at[index, "gene_id"])
+            elif exonMatchedGTF3.at[index, "Overlap_Ref_Transcript"]:
+                if exonMatchedGTF3.at[index, "solitaryGene"] == True:
+                    genesCoveredSG3.append(exonMatchedGTF3.at[index, "gene_id"])
+                elif exonMatchedGTF3.at[index, "solitaryGene"] == False:
+                    genesCoveredGN3.append(exonMatchedGTF3.at[index, "gene_id"])
+            elif exonMatchedGTF3.at[index, "Antisense_Reference"]:
+                if exonMatchedGTF3.at[index, "solitaryGene"] == True:
+                    genesCoveredSG4.append(exonMatchedGTF3.at[index, "gene_id"])
+                elif exonMatchedGTF3.at[index, "solitaryGene"] == False:
+                    genesCoveredGN4.append(exonMatchedGTF3.at[index, "gene_id"])
+                
+        
+        #Get the gene count lengths
+        genesCoveredSG = list(set(genesCoveredSG))
+        genesCoveredSGPerf = len(genesCoveredSG)
+        
+        genesCoveredGN = list(set(genesCoveredGN))
+        genesCoveredGNPerf = len(genesCoveredGN)
+        
+        #Find partial matches that don't have perfect matches but have partial
+        genesCoveredSG2 = [x for x in genesCoveredSG2 if x not in genesCoveredSG]
+        genesCoveredGN2 = [x for x in genesCoveredGN2 if x not in genesCoveredGN]
+        
+        #Find overlap matches that don't have partial or perfect matches
+        genesCoveredSG3 = [x for x in genesCoveredSG3 if x not in genesCoveredSG]
+        genesCoveredGN3 = [x for x in genesCoveredGN3 if x not in genesCoveredGN]
+        
+        genesCoveredSG3 = [x for x in genesCoveredSG3 if x not in genesCoveredSG2]
+        genesCoveredGN3 = [x for x in genesCoveredGN3 if x not in genesCoveredGN2]
+        
+        #Find antisense matches that don't have overlap or partial or perfect matches
+        genesCoveredSG4 = [x for x in genesCoveredSG4 if x not in genesCoveredSG]
+        genesCoveredGN4 = [x for x in genesCoveredGN4 if x not in genesCoveredGN]
+        
+        genesCoveredSG4 = [x for x in genesCoveredSG4 if x not in genesCoveredSG2]
+        genesCoveredGN4 = [x for x in genesCoveredGN4 if x not in genesCoveredGN2]
+        
+        genesCoveredSG4 = [x for x in genesCoveredSG4 if x not in genesCoveredSG3]
+        genesCoveredGN4 = [x for x in genesCoveredGN4 if x not in genesCoveredGN3]
+        
+        ##get non-overlapping, non-antisense, non-matching genes
+        solitaryOnly = exonMatchedGTF3[exonMatchedGTF3["solitaryGene"] == True]
+        networkOnly = exonMatchedGTF3[exonMatchedGTF3["solitaryGene"] == False]
+        
+        genesCoveredSG5 = set(solitaryOnly.gene_id)
+        solitaryGenesNum = len(list(set(solitaryOnly.gene_id)))
+        genesCoveredGN5 = set(networkOnly.gene_id)
+        networkGenesNum = len(list(set(networkOnly.gene_id)))
+        
+        genesCoveredSG5 = genesCoveredSG5.difference(set(genesCoveredSG), set(genesCoveredSG2), set(genesCoveredSG3), set(genesCoveredSG4))
+        genesCoveredGN5 = genesCoveredGN5.difference(set(genesCoveredGN), set(genesCoveredGN2), set(genesCoveredGN3), set(genesCoveredGN4))
+        
+        genesCoveredSG5 = list(genesCoveredSG5)
+        genesCoveredGN5 = list(genesCoveredGN5)
+        
+        #Get the partial match gene count lengths
+        genesCoveredSG2 = list(set(genesCoveredSG2))
+        genesCoveredSGPart = len(genesCoveredSG2)
+        
+        genesCoveredGN2 = list(set(genesCoveredGN2))
+        genesCoveredGNPart = len(genesCoveredGN2)
+        
+        ##Get the overlap match gene count lengths
+        genesCoveredSG3 = list(set(genesCoveredSG3))
+        genesCoveredSGOver = len(genesCoveredSG3)
+        
+        genesCoveredGN3 = list(set(genesCoveredGN3))
+        genesCoveredGNOver= len(genesCoveredGN3)
+        
+        ##Get the antisense match gene count lengths
+        genesCoveredSG4 = list(set(genesCoveredSG4))
+        genesCoveredSGAnti = len(genesCoveredSG4)
+        
+        genesCoveredGN4 = list(set(genesCoveredGN4))
+        genesCoveredGNAnti = len(genesCoveredGN4)
+        
+        ##Get the non-match, non-overlap, non-antisense gene count lengths
+        genesCoveredSGNon = len(genesCoveredSG5)
+        
+        genesCoveredGNNon = len(genesCoveredGN5)
+        
         
         #Print Solitary Gene sizes
         t = PrettyTable(['Name', 'Amount', "Percent"])
-        t.add_row(['Total Solitary Genes', solitaryGTF.shape[0], 100])
-        t.add_row(['Solitary Genes With Perfect Match To Reference', genesCoveredSGNum, round(((genesCoveredSGNum)/solitaryGTF.shape[0])*100, 3)])
-        t.add_row(['Solitary Genes With Partial Match To Reference (No Perfect)', genesCoveredSGNumBoth, round(((genesCoveredSGNumBoth)/solitaryGTF.shape[0])*100, 3)])
-        t.add_row(['Solitary Genes With Overlap, But No Match To Reference', solitaryGTFOverlapNUM, round(((solitaryGTFOverlapNUM)/solitaryGTF.shape[0])*100, 3)])
-        t.add_row(['Solitary Genes With No Match To Reference & No Overlap', solitaryGTFNMNum, round(((solitaryGTFNMNum)/solitaryGTF.shape[0])*100, 3)])
+        t.add_row(['Total Solitary Genes', solitaryGenesNum, 100])
+        t.add_row(['Solitary Genes With Perfect Match To Reference', genesCoveredSGPerf, round(((genesCoveredSGPerf)/solitaryGenesNum)*100, 3)])
+        t.add_row(['Solitary Genes With Partial Match To Reference (No Perfect)', genesCoveredSGPart, round(((genesCoveredSGPart)/solitaryGenesNum)*100, 3)])
+        t.add_row(['Solitary Genes With Overlap, But No Match To Reference', genesCoveredSGOver, round(((genesCoveredSGOver)/solitaryGenesNum)*100, 3)])
+        t.add_row(['Solitary Genes Antisense to Reference, But No Match or Overlap With Reference', genesCoveredSGAnti, round(((genesCoveredSGAnti)/solitaryGenesNum)*100, 3)])
+        t.add_row(['Solitary Genes With No Match To Reference, No Antisense, & No Overlap', genesCoveredSGNon, round(((genesCoveredSGNon)/solitaryGenesNum)*100, 3)])
         print("\n")
         print(t)
         
-        #Get Number of Gene Networks 
-        networkGTF = exonMatchedGTF3[exonMatchedGTF3["solitaryGene"] == False]
-        networkGTFNum = len(networkGTF.gene_id.unique())
-        
-        #Get Number of Overlapping Genes
-        networkGTFNM = networkGTF[networkGTF.astype(str)['Matched_Reference_Gene'] == '[]']
-        networkGTFNM = networkGTFNM[networkGTFNM.astype(str)['Reference_Transcript_Partial'] == '[]']
-        networkGTFOverlap = networkGTFNM[networkGTFNM.astype(str)['Overlap_Ref_Transcript'] != '[]']
-        networkGTFOverlapList = networkGTFOverlap.gene_id.unique()
-        
-        #Make Sure overlapping genese werent already included in any matches
-        networkGTFOverlapList = [x for x in networkGTFOverlapList if x not in genesCoveredGN]
-        networkGTFOverlapList = [x for x in networkGTFOverlapList if x not in genesCoveredGN3]
-        
-        networkGTFOverlapNum = len(networkGTFOverlapList)
-        
-        #Get Number of Non-Matches
-        networkGTFNM = networkGTFNM[networkGTFNM.astype(str)['Overlap_Ref_Transcript'] == '[]']
-        networkGTFNMList = networkGTFNM.gene_id.unique()
-        
-        networkGTFNMList = [x for x in networkGTFNMList if x not in genesCoveredGN]
-        networkGTFNMList = [x for x in networkGTFNMList if x not in genesCoveredGN3]
-        networkGTFNMList = [x for x in networkGTFNMList if x not in networkGTFOverlapList]
-        
-        networkGTFNMNum = len(networkGTFNMList)
-        
         #Print Gene Network sizes
         t = PrettyTable(['Name', 'Amount', "Percent"])
-        t.add_row(['Total Gene Networks', networkGTFNum, 100])
-        t.add_row(['Gene Networks With Perfect Match To Reference', genesCoveredGNNum, round(((genesCoveredGNNum)/networkGTFNum)*100, 3)])
-        t.add_row(['Gene Networks With Partial Match To Reference (No Perfect)', genesCoveredGNNumBoth, round(((genesCoveredGNNumBoth)/networkGTFNum)*100, 3)])
-        t.add_row(['Gene Networks With Overlap, But No Match To Reference', networkGTFOverlapNum, round(((networkGTFOverlapNum)/networkGTFNum)*100, 3)])
-        t.add_row(['Gene Networks With No Match To Reference & No Overlap', networkGTFNMNum, round(((networkGTFNMNum)/networkGTFNum)*100, 3)])
+        t.add_row(['Total Gene Networks', networkGenesNum, 100])
+        t.add_row(['Gene Networks With Perfect Match To Reference', genesCoveredGNPerf, round(((genesCoveredGNPerf)/networkGenesNum)*100, 3)])
+        t.add_row(['Gene Networks With Partial Match To Reference (No Perfect)', genesCoveredGNPart, round(((genesCoveredGNPart)/networkGenesNum)*100, 3)])
+        t.add_row(['Gene Networks With Overlap, But No Match To Reference', genesCoveredGNOver, round(((genesCoveredGNOver)/networkGenesNum)*100, 3)])
+        t.add_row(['Gene Networks Antisense to Reference, But No Match or Overlap With Reference', genesCoveredGNAnti, round(((genesCoveredGNAnti)/networkGenesNum)*100, 3)])
+        t.add_row(['Gene Networks With No Match To Reference & No Overlap', genesCoveredGNNon, round(((genesCoveredGNNon)/networkGenesNum)*100, 3)])
         print("\n")
         print(t)
         
@@ -1934,12 +2235,14 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
         pyuSeries2M = from_contents(vennDict2)
         
         print("Gene Overlap:")
-        plot(pyuSeriesM, sort_by = "cardinality", show_counts = True)
+        fig = plt.figure(figsize=(3, 3))
+        plot(pyuSeriesM, sort_by = "cardinality", show_counts = True, element_size=None)
         plt.savefig('plots/multiGene.png', bbox_inches='tight')
         plt.show()
         
         print("Transcript Overlap:")
-        plot(pyuSeries2M, sort_by = "cardinality", show_counts = True)
+        fig = plt.figure(figsize=(3, 3))
+        plot(pyuSeries2M, sort_by = "cardinality", show_counts = True, element_size=None)
         plt.savefig('plots/multiTranscript.png', bbox_inches='tight')
         plt.show()
         
@@ -1954,70 +2257,74 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
             nonReference = oneExonMatchedGTF3[oneExonMatchedGTF3.astype(str)['Matched_Reference_Gene'] == '[]']
             nonReferenceSize = len(nonReference.index)
 
-
-            #get size of the GTf that matched something paritally and perfectly
-            doubleMatch = oneExonMatchedGTF3[oneExonMatchedGTF3.astype(str)['Reference_Transcript_Partial'] != '[]']
-            doubleMatch = doubleMatch[doubleMatch.astype(str)['Matched_Reference_Gene'] != '[]']
-            doubleMatchSize = len(doubleMatch.index)
-
-
-
-            ##Find Gene Coverage
-            genesCovered = []
-            for index, row in oneExonMatchedGTF3.iterrows():
-                if oneExonMatchedGTF3.at[index, "Matched_Reference_Gene"]:
-                    genesCovered.append(oneExonMatchedGTF3.at[index, "gene_id"])
-
-            genesCoveredFinal = list(set(genesCovered))
-            genesCoveredNum = len(genesCoveredFinal)
-            
-            genesCovered2 = []
-            for index, row in oneExonMatchedGTF3.iterrows():
-                if oneExonMatchedGTF3.at[index, "Reference_Transcript_Partial"]:              
-                    genesCovered2.append(oneExonMatchedGTF3.at[index, "gene_id"])
-
-            
-            genesCovered2 = [x for x in genesCovered2 if x not in genesCovered]
-            
-            genesCoveredFinal2 = list(set(genesCovered2))
-            genesCoveredNumBoth = len(genesCoveredFinal2)
             
             #Get amount of gtf that overlapepd a known transcript but did not match anyhting
             transcriptomeOverlap = oneExonMatchedGTF3[oneExonMatchedGTF3['Overlap_Ref_Transcript'].map(len) > 0]
             transcriptomeOverlap = transcriptomeOverlap[transcriptomeOverlap['Reference_Transcript_Partial'].map(len) == 0]
             transcriptomeOverlap = transcriptomeOverlap[transcriptomeOverlap['Matched_Reference_Transcript'].map(len) == 0]
             transcriptomeOverlapNum = len(transcriptomeOverlap.index)
+            
+            ##Get amount of antisense matches
+            transcriptomeAntisense = oneExonMatchedGTF3[oneExonMatchedGTF3['Antisense_Reference'].map(len) > 0]
+            transcriptomeAntisense = transcriptomeAntisense[transcriptomeAntisense['Reference_Transcript_Partial'].map(len) == 0]
+            transcriptomeAntisense = transcriptomeAntisense[transcriptomeAntisense['Overlap_Ref_Transcript'].map(len) == 0]
+            transcriptomeAntisense = transcriptomeAntisense[transcriptomeAntisense['Matched_Reference_Transcript'].map(len) == 0]
+            transcriptomeAntiNum = len(transcriptomeAntisense.index)
 
             
             matchedPerf = fullRefSize-nonReferenceSize
-            noMatch = fullRefSize - matchedPerf - transcriptomeOverlapNum
+            noMatch = fullRefSize - matchedPerf - transcriptomeOverlapNum - transcriptomeAntiNum
 
             #Print a table of the  respective transcript sizes
             t = PrettyTable(['Name', 'Amount', 'Percent'])
             t.add_row(['Full Size', fullRefSize, 100])
             t.add_row(['Perfect Match To Reference', matchedPerf, round(((matchedPerf)/fullRefSize)*100, 3)])
             t.add_row(['Overlap With Known Transcript, No Match', transcriptomeOverlapNum, round(((transcriptomeOverlapNum)/fullRefSize)*100, 3)])
+            t.add_row(['Antisense With Known Transcript, No Match or Overlap', transcriptomeAntiNum, round(((transcriptomeAntiNum)/fullRefSize)*100, 3)])
             t.add_row(['No Match & No Overlap', noMatch, round(((noMatch)/fullRefSize)*100, 3)])
             print("\n")
             print(t)
             
+            ##Find Gene Coverage
+            genesCovered = []
+            genesOverlapped = []
+            genesAntisense = []
+            genesNone = []
+            for index, row in oneExonMatchedGTF3.iterrows():
+                if oneExonMatchedGTF3.at[index, "Matched_Reference_Gene"]:
+                    genesCovered.append(oneExonMatchedGTF3.at[index, "gene_id"])
+                elif oneExonMatchedGTF3.at[index, "Overlap_Ref_Transcript"]:
+                    genesOverlapped.append(oneExonMatchedGTF3.at[index, "gene_id"])
+                elif oneExonMatchedGTF3.at[index, "Antisense_Reference"]:
+                    genesAntisense.append(oneExonMatchedGTF3.at[index, "gene_id"])
+                else:
+                    genesNone.append(oneExonMatchedGTF3.at[index, "gene_id"])
+                    
+            ##turn each into a set
+            genesCovered = set(genesCovered)
+            genesOverlapped = set(genesOverlapped)
+            genesAntisense = set(genesAntisense)
+            genesNone = set(genesNone)
             
-            ##Get the size of overlapping solitary genes and of non matching solitary genes
-            solitaryGTF = oneExonMatchedGTF3[oneExonMatchedGTF3["solitaryGene"] == True]
-            solitaryGTFNM = solitaryGTF[solitaryGTF.astype(str)['Matched_Reference_Gene'] == '[]']
-            solitaryGTFNM = solitaryGTFNM[solitaryGTFNM.astype(str)['Reference_Transcript_Partial'] == '[]']
-            solitaryGTFOverlap = solitaryGTFNM[solitaryGTFNM.astype(str)['Overlap_Ref_Transcript'] != '[]']
-            solitaryGTFOverlapNUM = solitaryGTFOverlap.shape[0]
+            ##Make sure theres no overlap
+            genesOverlapped = genesOverlapped.difference(genesCovered)
+            genesAntisense = genesAntisense.difference(genesCovered, genesOverlapped)
+            genesNone = genesNone.difference(genesCovered, genesOverlapped, genesAntisense)
 
-            solitaryGTFNM = solitaryGTFNM[solitaryGTFNM.astype(str)['Overlap_Ref_Transcript'] == '[]']
-            solitaryGTFNMNum = solitaryGTFNM.shape[0]
-
+            ##Get their size
+            genesCoveredNum = len(list(genesCovered))
+            genesOverlappedNum = len(list(genesOverlapped))
+            genesAntisenseNum = len(list(genesAntisense))
+            genesNoneNum = len(list(genesNone))
+            allSolitaryNum= len(list(set(oneExonMatchedGTF3.gene_id)))
+            
             #Print Solitary Gene sizes
             t = PrettyTable(['Name', 'Amount', "Percent"])
-            t.add_row(['Total Solitary Genes', solitaryGTF.shape[0], 100])
-            t.add_row(['Solitary Genes With Perfect Match To Reference', genesCoveredNum, round(((genesCoveredNum)/solitaryGTF.shape[0])*100, 3)])
-            t.add_row(['Solitary Genes With Overlap, But No Match To Reference', solitaryGTFOverlapNUM, round(((solitaryGTFOverlapNUM)/solitaryGTF.shape[0])*100, 3)])
-            t.add_row(['Solitary Genes With No Match To Reference & No Overlap', solitaryGTFNMNum, round(((solitaryGTFNMNum)/solitaryGTF.shape[0])*100, 3)])
+            t.add_row(['Total Solitary Genes', allSolitaryNum, 100])
+            t.add_row(['Solitary Genes With Perfect Match To Reference', genesCoveredNum, round(((genesCoveredNum)/allSolitaryNum)*100, 3)])
+            t.add_row(['Solitary Genes With Overlap, But No Match To Reference', genesOverlappedNum, round(((genesOverlappedNum)/allSolitaryNum)*100, 3)])
+            t.add_row(['Solitary Genes Antisense to Reference, But No Match or Overlap With Reference', genesAntisenseNum, round(((genesAntisenseNum)/allSolitaryNum)*100, 3)])
+            t.add_row(['Solitary Genes With No Match To Reference, No Antisense, & No Overlap', genesNoneNum, round(((genesNoneNum)/allSolitaryNum)*100, 3)])
             print("\n")
             print(t)
 
@@ -2078,19 +2385,19 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
             pyuSeries2S = from_contents(vennDict2)
 
             print("Gene Overlap:")
-            plot(pyuSeriesS, sort_by = "cardinality", show_counts = True)
-            plt.savefig('plots/singleGene.png', bbox_inches='tight')
+            fig = plt.figure(figsize=(3, 3))
+            plot(pyuSeriesS, sort_by = "cardinality", show_counts = True, element_size=None)
+            plt.savefig('plots/singleGene.png')
             plt.show()
 
             print("Transcript Overlap:")
-            plot(pyuSeries2S, sort_by = "cardinality", show_counts = True)
-            plt.savefig('plots/singleTranscript.png', bbox_inches='tight')
+            fig = plt.figure(figsize=(3, 3))
+            plot(pyuSeries2S, sort_by = "cardinality", show_counts = True, element_size=None)
+            plt.savefig('plots/singleTranscript.png')
             plt.show()
         
         return(exonMatchedGTF4)
     else:
-        
-        exonMatchedGTF4 = exonMatchedGTF2.copy
         
         if oneExonSeperate == True:
             oneExonMatchedGTF2 = exonMatchedGTF2[(exonMatchedGTF2.Splice_Junctions.str.len() == 0)]
@@ -2104,7 +2411,9 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
         vennDict2 = {}
 
         analyzedLabels2 = analyzedLabels
-        analyzedLabels2.append(referenceLabel)
+        
+        if referenceLabel != "":
+            analyzedLabels2.append(referenceLabel)
 
         geneLists = [ [] for _ in range(len(analyzedLabels2)) ]
 
@@ -2125,6 +2434,7 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
         if vennReference == False:
             del vennDict[referenceLabel]
             del vennDict2[referenceLabel]
+            
 
         if len(analyzedLabels) == 6:
             print("Gene Overlap:")
@@ -2146,7 +2456,8 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
 
         #Create our PYU plot
         pyuSeries = from_contents(vennDict2)
-        plot(pyuSeries)
+        fig = plt.figure(figsize=(3, 3))
+        plot(pyuSeries, sort_by = "cardinality", show_counts = True, element_size=None)
         plt.show()            
         
         if oneExonSeperate == True:
@@ -2197,10 +2508,11 @@ def gtfTranscriptome2(analyzedGTFs,analyzedLabels, gtfReference = "", referenceL
 
             #Create our PYU plot
             pyuSeries = from_contents(vennDict2)
-            plot(pyuSeries)
+            fig = plt.figure(figsize=(3, 3))
+            plot(pyuSeries, sort_by = "cardinality", show_counts = True, element_size=None)
             plt.show()
             
+            exonMatchedGTF4 = exonMatchedGTF2
+            
     
-    return(exonMatchedGTF4)
-    
-    
+    return(exonMatchedGTF2)
