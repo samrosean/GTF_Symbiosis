@@ -812,7 +812,7 @@ def findFusionGenes(matchedTranscriptome, referenceTranscriptome):
     
 def transcriptomeMasterFunction2(GTFList, GTFLabels, threshold, distanceThreshold, collapse = True):
     
-    import pandas
+    dfkn = oi89
     
     if len(GTFList) <= 1:
         print("At least two GTFs are required to assemble transcriptome")
